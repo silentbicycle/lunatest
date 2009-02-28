@@ -3,7 +3,6 @@
 -- Usage:
 -- moonunit modulename [-v]
 
-
 -- http://lua-users.org/wiki/LuaModuleFunctionCritiqued
 local M = {}                    -- module
 
@@ -33,10 +32,6 @@ function M.run(testfun, testname, verbose)
    else                             -- failed
       if etype(res) == "Failure" then --
          if verbose then print("FAIL", tostring(res)) else print("F") end
---             local descr = 
---             print("FAIL", descr)
---          else
---             print("F")
       else
          if verbose then print("ERROR", res) else print("!") end 
       end
@@ -145,14 +140,22 @@ function M.runtests(pkgname, verbose, prefix)
    prefix = prefix or "test_"
 
    -- Run package test suite, if defined.
-   local pkg = require(pkgname)
-   local tests = getmetatable(pkg).__tests
-   if type(tests) == "table" then
-      for i, t in pairs(tests) do
-         t:doit(verbose)
-      end
+   local pkg
+   -- Prevent looping.
+   if pkgname == "moonunit" then pkg = M else pkg = require(pkgname) end
 
-      return
+   local pkg_m = getmetatable(pkg)
+   if pkg_m then
+      local tests = pkg_m.__tests
+      if type(tests) == "table" then       -- list of tests
+         print("running test list")
+         for i, t in pairs(tests) do t:doit(verbose) end
+         return
+      elseif type(tests) == "function" then -- test suite
+         --print("running test suite; verbose=", verbose )
+         M.run(tests, "test suite", verbose)
+         return
+      end 
    end
 
    -- Else, run every function beginning with prefix (e.g. "test_") as test.
@@ -165,9 +168,9 @@ function M.runtests(pkgname, verbose, prefix)
 end
 
 
--------------------------
--- Test case object -- --
--------------------------
+----------------------
+-- Test case object --
+----------------------
 
 local T = { __index = T, __type = "Test" }
 
@@ -199,4 +202,25 @@ function M.Test(name, testfun, setup, teardown)
 end
 
 
-return M
+local function testsuite()
+   print("boo")
+   M.always_fail("oh crap")
+
+end
+
+
+setmetatable(M, { __tests=testsuite })
+
+-- This is like Python's if __name__ == "__main__":
+if arg then                             -- called as script
+   local verbose = false
+   if arg[1] == "-v" then
+      print("setting verbose")
+      verbose = true
+      table.remove(arg, 1)
+   end
+   
+   M.runtests(arg[1], verbose, arg[2])
+else                                    -- loaded as module
+   return M
+end 
