@@ -1,226 +1,128 @@
-#!/usr/local/bin/lua
---
--- Usage:
--- moonunit modulename [-v]
+require "random"
 
--- http://lua-users.org/wiki/LuaModuleFunctionCritiqued
-local M = {}                    -- module
 
--- local helper funs
-local function etype(val)
-   local maintype = type(val)
-   if maintype == "table" then
-      local ext_type = getmetatable(val).__type
-      if ext_type then return ext_type end
-   end
+printf = function(...) io.stdout:write(string.format(...)) end
 
-   return maintype
+local randbound = 2 ^ 30        --upper bound for random.valuei()
+
+
+-- Create a random string.
+function gen_string(twister, arg)
+   local len = twister:valuei(string.len(arg)) - 1
+   return string.rep("*", len)
 end
 
 
--- Run a test function, print result.
-function M.run(testfun, testname, verbose)
-   verbose = verbose or false
-   if type(testfun) ~= "function" then 
-      error("Must be called with a function.", 2) 
+-- Generate a random number, according to arg.
+function gen_number(twister, arg)
+   local signed = (arg < 0)
+   local float
+   if signed then float = (math.ceil(arg) ~= arg) else
+      float = (math.floor(arg) ~= arg)
    end
    
-   local status, result = pcall(testfun)
+   local res = twister:valuei(arg) - 1
+   if signed and twister:valuei(2) == 2 then res = -res end
+   if float then res = res + twister:value() end
+   return res
+end
 
-   if status then                   -- passed
-      if verbose then print("PASS\t" .. testname) else print(".") end
-   else                             -- failed
-      if etype(res) == "Failure" then --
-         if verbose then print("FAIL", tostring(res)) else print("F") end
-      else
-         if verbose then print("ERROR", res) else print("!") end 
+
+-- Create an arbitrary instance of a value.
+function generate(twister, arg)
+   if type(arg) == "number" then
+      return gen_number(twister, arg)
+   elseif type(arg) == "function" then  -- assume f(twister) -> val
+      return arg(twister)
+   elseif type(arg) == "string" then
+      return gen_string(twister, arg)
+   elseif type(arg) == "userdata" then
+      local mt = getmetatable(arg)
+      return mt.__random(twister, arg)
+   elseif type(arg) == "table" then
+      local mt = getmetatable(arg)
+      if mt and mt.__random then return mt.__random(twister, arg) else
+         error("TODO")             -- lists and tables...
       end
-   end
-end
-
-
--- Randomized testing, a la QuickCheck.
--- ( (random) -> 'a) -> ( 'a -> bool ) -> bool
-function M.random_test(gen_fun, prop_fun, seed, count)
-   if seed then math.randomseed(seed) end
-   count = count or 100
-
-   for i=1,count do
-      local randval = gen_fun()
-      assert_true(prop_fun(randval))
-   end
-end
-
-
-
--- Failure objects
-F = { __index = F, __type = "Failure" }
-
-function F.__tostring(f)
-   local e_and_g
-   if f.expected and f.got then
-      e_and_g = string.format(" (expected %s, got %s)", 
-                              f.expected, f.got)
-   end
-   return string.format([[%s(%d): %s%s]], 
-                        f.testname or "", 
-                        f.line or -1, 
-                        f.description or "",
-                        e_and_g or "")
-end
-
-function M.Failure(descr, line, expected, got)
-   local fail = { description = descr, line = line }
-   if expected then fail.expected = expected end
-   if got then fail.got = got end
-   return setmetatable(fail, F)
-end
-
-
---------------------------
--- Some test conditions --
---------------------------
-
--- Basics
-function judge(condit, descr, expected, got)
-   if condit then 
-      return    -- passed
    else
-      local line = nil --TODO: get from call stack
-      error(M.Failure(descr, line, expected, got), 3)
-   end
-end
-
-function M.assert_true(val, msg)    return judge(val, msg or "failed") end
-function M.always_pass(msg)    return judge(true, msg) end
-function M.always_fail(msg)    return judge(false, msg) end
-function M.assert_eq(val, expected)
-   return judge(val == expected, "==", expected, val) 
-end
-function M.assert_neq(val, expected)
-   return judge(val ~= expected, "~=", expected, val) 
-end
-function M.assert_lt(val, expected)    
-   judge(val < expected, "<", expected, val)
-end
-function M.assert_lte(val, expected)   
-   judge(val <= expected, "<=", expected, val)
-end
-function M.assert_gt(val, expected)    
-   judge(val > expected, ">", expected, val)
-end
-function M.assert_gte(val, expected)   
-   judge(val >= expected, ">=", expected, val)
-end
-function M.assert_type(val, exp_type)  
-   judge(type(val) == exp_type, "type", expected, val)
-end
-
-function M.assert_contains(container, elt) 
-   if type(container) == "string" and type(elt) == "string" then
-      judge(string.find(container, elt), "contains", elt, container)
-   elseif type(container) == "table" then
-      if container[elt] then 
-         return true
-      else
-         for k,v in ipairs(container) do
-            if v == elt then return true end
-         end
-      end
-      always_fail("not found")
+      error("Cannot randomly generate values of type " .. type(arg) .. ".")
    end
 end
 
 
--- If the module has a __test suite function in its metatable, run that,
--- otherwise scan through the exported functions from a module 
--- for those beginning with prefix, and run them as tests.
--- TODO: setup and teardown
-function M.runtests(pkgname, verbose, prefix)
-   prefix = prefix or "test_"
-
-   -- Run package test suite, if defined.
-   local pkg
-   -- Prevent looping.
-   if pkgname == "moonunit" then pkg = M else pkg = require(pkgname) end
-
-   local pkg_m = getmetatable(pkg)
-   if pkg_m then
-      local tests = pkg_m.__tests
-      if type(tests) == "table" then       -- list of tests
-         print("running test list")
-         for i, t in pairs(tests) do t:doit(verbose) end
-         return
-      elseif type(tests) == "function" then -- test suite
-         --print("running test suite; verbose=", verbose )
-         M.run(tests, "test suite", verbose)
-         return
-      end 
-   end
-
-   -- Else, run every function beginning with prefix (e.g. "test_") as test.
-   for name, val in ipairs(pkg) do
-      if (string.find(name, prefix) == 1
-       and type(val) == "function") then
-         M.run(val, name, verbose)
-      end
-   end
-end
-
-
-----------------------
--- Test case object --
-----------------------
-
-local T = { __index = T, __type = "Test" }
-
-local function run_hook(hook)
-   if type(hook) == "function" then hook() end
-end
-
-function T:run(verbose)
-   run_hook(self.setup)
-
-   run(self:doit(), self.name, verbose)
-
-   run_hook(self.teardown)
-end
-
-function T:doit()
-   always_fail("forgot to define the test")
-end
-
--- constructor
-function M.Test(name, testfun, setup, teardown)
-   local test = { name = name}
-
-   if testfun then test.doit = testfun end
-   if setup then test.setup = setup end
-   if teardown then test.teardown = teardown end
-
-   return setmetatable({}, T)
-end
-
-
-local function testsuite()
-   print("boo")
-   M.always_fail("oh crap")
-
-end
-
-
-setmetatable(M, { __tests=testsuite })
-
--- This is like Python's if __name__ == "__main__":
-if arg then                             -- called as script
-   local verbose = false
-   if arg[1] == "-v" then
-      print("setting verbose")
-      verbose = true
-      table.remove(arg, 1)
-   end
+-- Process args.
+function proc_args(arglist)
+   local name, pred, args
+   if type(arglist[1]) == "string" then 
+      name = arglist[1] .. ": "
+      table.remove(arglist, 1)
+   else name = "" end         
    
-   M.runtests(arg[1], verbose, arg[2])
-else                                    -- loaded as module
-   return M
-end 
+   local pred = arglist[1]
+   assert(type(pred) == "function", 
+          "First argument (after optional name) must be trial function.")
+   table.remove(arglist, 1)
+   
+   return name, pred, arglist
+end
+
+
+-- Construct a random tester.
+function new(t)
+   t = t or {}
+   local count = t.count or 100
+   local seed = t.seed
+   local skips_allowed = t.skips or 50
+   local verbose = t.verbose or false
+   local progress = t.progress or 10
+   local twister = random.new()
+   
+   local function test(...)
+      local name, check, args = proc_args{ ... }
+
+      seed = seed or os.time()
+      printf("%s%d trials, seed %s: ", name, count, seed)
+      twister:seed(seed)
+
+      local passed = 0
+      local failed = 0
+      local skipped = 0
+      local errors = 0
+
+      local thisseed = twister:valuei(randbound)
+      for trial=1,count do
+         local rand = twister:clone()
+         local callargs = {}
+         for i=1, #args do
+            callargs[i] = generate(twister, args[i])
+         end
+         local status, result = pcall(check, unpack(callargs))
+
+         if status then
+            if result == true or result == "pass" then passed = passed + 1
+            elseif result == "skip" then skipped = skipped + 1
+            else failed = failed + 1 end
+         elseif result == "skip" then    -- "exception"-style, error("skip")
+            skipped = skipped + 1
+            if skipped > skips_allowed then
+               printf("\n%sWarning -- %d skips at %d of %d trials (+%d, -%d).\n",
+                      name, skips_allowed, trial, count, passed, failed)
+               return
+            end
+         elseif result == "fail" then failed = failed + 1    --same, error("fail")
+         else                                                --actual error
+            printf("\nERROR: seed %d, %s", thisseed, result or "(nil)")
+            errors = errors + 1
+         end
+
+         if trial % progress == 0 and count > 0 then 
+            printf(".") 
+            io.flush(io.stdout)
+         end
+         thisseed = twister:valuei(randbound)
+      end
+      printf(" (+%d, -%d, s%d, e%d)\n", passed, failed, skipped, errors)
+   end
+
+   return test
+end
