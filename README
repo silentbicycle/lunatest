@@ -1,1 +1,1 @@
-A unit testing framework, inspired by PyUnit and Haskell's Quickcheck.
+A randomized testing framework for Lua, inspired by Haskell's Quickcheck.
