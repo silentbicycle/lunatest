@@ -279,7 +279,7 @@ end
 -- Show progress, according to verbosity.
 function Tester:show_progress(log, res, seed, trials, 
                               pass, fail, skip, err)
-   if self.verbose == true then
+   if self._verbose == true then
       self:log("%-4s %-20s (+%d, -%d, s%d, e%d)\n",
                res, seed, pass, fail, skip, err)
    elseif (trials % self._progress == 0 and self._count > 0) then
@@ -342,12 +342,26 @@ function Tester:test(...)
    local failed = 0
    local skipped = 0
    local errors = 0
+
+   -- Seeds already tested. (A bitarray would be preferable.)
+   local tried = {}
    
    for trial=1,self._count do
       -- Get & save the current seed, so we can report it.
-      local thisseed = rng:get_int(self._seed_limit)
-      self:set_seed(thisseed)
-      
+      local cur_seed = rng:get_int(self._seed_limit)
+      local first_tried = cur_seed
+      while tried[cur_seed] do 
+         cur_seed = cur_seed + 1
+         if cur_seed > self._seed_limit then cur_seed = 0
+         elseif cur_seed == first_tried then   --wrapped all available
+            self:log("\nAll seeds <=%d exhausted, (+%d, -%d, s%d, e%d)\n", 
+                     self._seed_limit, passed, failed, skipped, errors)
+            return passed == trial - 1
+         end
+      end
+      self:set_seed(cur_seed)
+      tried[cur_seed] = true
+
       local callargs = {}
       for i=1, #args do
          callargs[i] = generate_arbitrary(rng, args[i])
@@ -363,7 +377,7 @@ function Tester:test(...)
          res = string.sub(res, -4) -- error is preceded by file:line
          if not ok[res] then
             res = "error"
-            self:log("\nERROR: seed %d, %s", thisseed,
+            self:log("\nERROR: seed %d, %s", cur_seed,
                      res or "(error() returned nil)")
             errors = errors + 1
          end
@@ -373,7 +387,7 @@ function Tester:test(...)
       elseif res == "fail" then
          if self._verbose ~= "error_only" then
             self:log("\n%sFailed -- %s (+%d, -%d)",
-               padded_name, thisseed, passed, failed)
+               padded_name, cur_seed, passed, failed)
          end
          failed = failed + 1
          
@@ -398,7 +412,7 @@ function Tester:test(...)
          end
       end
       
-      self:show_progress(log, res, thisseed, trial, passed,
+      self:show_progress(log, res, cur_seed, trial, passed,
                          failed, skipped, errors)
    end
    

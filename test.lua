@@ -26,20 +26,21 @@ t:test(function(x) return x end,
 
 
 -- Show progress, show arguments on error and failure (default).
--- Seeds can be made arbitrarily small.
-t = moonunit.new{ count=1000, progress=100, seed_limit=99 }
+-- Seeds can be made arbitrarily small; if all possible seeds have 
+-- been used, it will terminate the test and print the results.
+t = moonunit.new{ count=1000, progress=100 }
 
 -- String patterns
 label("Test with string pattern")
 t:test("has_vowels", 
        function(s) return string.match(s, "[aeiou]") end,
        "50 %l")        -- generate 50 random lowercase letters
-t:test("has_an_x", 
+t:test("has_an_x",
        function(s) return string.match(s, "x") end,
-       "200 %l")
+       "100 %l")       -- ususally passes, but not always...
 t:test("has_no_Xs", 
        function(s) return not string.match(s, "X") end,
-       "200 %l")                --lowercase only
+       "500 %l")       --lowercase only, won't find "X"s
 
 label("(Error on 'xx', skip on '  '.)")
 t:test("show_error", 
@@ -90,7 +91,7 @@ t:test("table_length2", function(t) return #t < 6 end, fliptable)
 
 -- This caught a bug in itself. :)
 label("Test that the RNG wrapper matches expected bounds")
-t = moonunit.new{ count=1000, progress=100 }
+t = moonunit.new{ count=10000, progress=1000 }
 
 local low, high
 for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1}, 
