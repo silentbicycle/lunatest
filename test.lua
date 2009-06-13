@@ -36,7 +36,7 @@ t:test("has_vowels",
        "50 %l")        -- generate 50 random lowercase letters
 t:test("has_an_x",
        function(s) return string.match(s, "x") end,
-       "100 %l")       -- ususally passes, but not always...
+       "100,150 %l")       -- ususally passes, but not always...
 t:test("has_no_Xs", 
        function(s) return not string.match(s, "X") end,
        "500 %l")       --lowercase only, won't find "X"s
@@ -51,7 +51,7 @@ t:test("show_error",
           end
           return string.match(s, ".") 
        end,
-       "4 %l ")
+       "4,6 %l ")
 
 
 -- Ints and floats
@@ -86,10 +86,11 @@ local fliptable = setmetatable( {}, { __index = flipMT })
 t:test("table_length2", function(t) return #t < 6 end, fliptable)
 
 
+label "Now, let's test the actual program..."
 
 -- This caught a bug in itself. :)
 label("Test that the RNG wrapper matches expected bounds")
-t = moonunit.new{ count=10000 }
+t = moonunit.new{ count=1000 }
 
 local low, high
 for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1}, 
@@ -114,4 +115,27 @@ for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1},
                                         t < high and t >= low 
                                      end, 
           function(r) return r:get_float(low, high) end)
+end
+
+label("Test string lengths are generated correctly")
+for run,high in ipairs{ 11, 12, 13 } do
+   t:test("strlenL_" .. high, 
+          function(s) return string.len(s) >= 10 end,
+          "10," .. high .. " %l")
+
+   local used = {}  -- also test overall generation
+
+   t:test("strlenLH_" .. high,
+          function(s) 
+             local len = string.len(s)
+             used[len] = true
+             return len >= 10 and len <= high
+          end,
+          "10," .. high .. " %l")
+
+   for i=10,high do 
+      if not used[i] then 
+         print("Never made any strings of length " .. i)
+      end
+   end
 end
