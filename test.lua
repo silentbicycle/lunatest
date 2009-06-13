@@ -26,7 +26,8 @@ t:test(function(x) return x end,
 
 
 -- Show progress, show arguments on error and failure (default).
-t = moonunit.new{ count=1000, progress=100 }
+-- Seeds can be made arbitrarily small.
+t = moonunit.new{ count=1000, progress=100, seed_limit=99 }
 
 -- String patterns
 label("Test with string pattern")
@@ -96,21 +97,21 @@ for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1},
                          {-100, 100}, {-1, 0}, {0, 1} } do
    low, high = pair[1], pair[2]
    if high > 1 then             -- can't generate randints 0 <= x < 1
-      t:test("test_int_genL_" .. run,
+      t:test("int_genL_" .. run,
              function(i) return i < high end,
              function(r) return r:get_int(high) end)
    end   
-   t:test("test_int_genLH_" .. run, function(i) 
+   t:test("int_genLH_" .. run, function(i) 
                                       return i < high and i >= low 
                                    end,
           function(r) return r:get_int(low, high) end)
    
    if high > 1 then
-      t:test("test_float_genL_" .. run, function(t) return t < high end, 
+      t:test("float_genL_" .. run, function(t) return t < high end, 
              function(r) return r:get_float(high) end)
    end
    
-   t:test("test_float_genLH_" .. run, function(t) return 
+   t:test("float_genLH_" .. run, function(t) return 
                                         t < high and t >= low 
                                      end, 
           function(r) return r:get_float(low, high) end)

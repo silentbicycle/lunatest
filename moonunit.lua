@@ -17,7 +17,7 @@
 -- For usage and examples, see README and the test suite.
 ------------------------------------------------------------------------
 
-local use_lrandom = true        -- prefer lhf's "random" package
+
 
 ------------
 -- Module --
@@ -25,6 +25,10 @@ local use_lrandom = true        -- prefer lhf's "random" package
 
 -- standard library dependencies
 local io, math, os, string, table = io, math, os, string, table
+
+-- require lhf's random, from 
+-- http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
+local random = require "random"
 
 -- required core global funs
 local assert, error, ipairs, pcall, print, setmetatable, tonumber =
@@ -59,43 +63,14 @@ local function determine_accuracy()
 end
 local bits_of_accuracy = determine_accuracy()
 
-
 -- Metatable for RNG objects
 local RNGmt = { __index=RNG, __tostring=RNG.tostring }
 
-local value         -- value() -> float 0 <= x < 1
-local valuelh       -- valuelh(low, high) -> int low <= x < high
-
--- Try to load lhf's random module[1], and fall back on math.random
--- if it isn't available. (This code gives them a common interface.)
--- [1]: (http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom)
-if use_lrandom and pcall(function() 
-                            require "random" 
-                         end) then
---    print("USING RANDOM")
-   RNG.limit = 2^bits_of_accuracy
-   RNG.set_seed = function(self, s) 
-                     self._r:seed(s) 
-                  end
-
-   value = function(self) return self._r:value() end
-   valuelh = function(self, low, hi) return self._r:value(low, hi - 1) end
-   RNG.new = function()
-                return setmetatable({ _r = random.new() }, RNGmt)
-             end
-else
-   RNG.limit = math.min(2^30, 2^bits_of_accuracy)
---    print("USING MATH")
-   RNG.set_seed = function(self, s) 
-                     math.randomseed(s) 
-                  end
-
-   value = function(self) return math.random() end
-   valuelh = function(self, low, hi) return math.random(low, hi - 1) end
-   RNG.new = function()
-                return setmetatable({}, RNGmt)
-             end
-end
+RNG.set_seed = function(self, s) self._r:seed(s) end
+local valuelh = function(self, low, hi) return self._r:value(low, hi - 1) end
+RNG.new = function()
+             return setmetatable({ _r = random.new() }, RNGmt)
+          end
 
 
 -- Get seed.
@@ -121,7 +96,7 @@ RNG.get_int = function(self, low, hi)
 -- Get a random float.
 -- r:get_float(3, 5)  ->  3.0 <= x < 5.0
 RNG.get_float = function(self, low, hi)
-                   return RNG.get_int(self, low, hi) + value(self)
+                   return self:get_int(low, hi) + self._r:value()
                 end
 
 
@@ -331,17 +306,26 @@ function new(opt)
    opt = opt or {}
    local t = {}                 --new tester
    t._count = opt.count or 100
-   t._seed = opt.seed or os.time()
    t._skips_allowed = opt.skips or 50
    t._verbose = opt.verbose or false
    t._progress = opt.progress or 10
-   t.rng = RNG.new()
    t._randbound = 2^bits_of_accuracy
    t._out = opt.log or io.stdout
+   t._seed_limit = opt.seed_limit or math.min(1e13, 2^bits_of_accuracy)
+   t._seed = opt.seed or os.time() % t._seed_limit
+
    t.show_progress = opt.show_progress   -- optionally replace progress hook
+   t.rng = RNG.new()
 
    return setmetatable(t, { __index=Tester, __tostring=Tester.tostring })
 end
+
+
+local function seed_digits(t)
+   local log = math.log
+   return math.floor(log(t._seed_limit) / log(10)) + 1
+end
+
 
 -- Run an actual test.
 function Tester:test(...)
@@ -349,7 +333,8 @@ function Tester:test(...)
    
    local padded_name = (name ~= "" and name .. ":\t") or ""
 
-   self:log("%s%d trials, seed %10s: ", padded_name, self._count, self._seed)
+   self:log("%s%d trials, seed %" .. seed_digits(self) ..
+         "s ", padded_name, self._count, self._seed)
    if self._verbose == true then self:log("\n") end
    local rng = self.rng
    
@@ -360,7 +345,7 @@ function Tester:test(...)
    
    for trial=1,self._count do
       -- Get & save the current seed, so we can report it.
-      local thisseed = rng:get_int(rng.limit)
+      local thisseed = rng:get_int(self._seed_limit)
       self:set_seed(thisseed)
       
       local callargs = {}
