@@ -13,8 +13,7 @@ t:test(function(x) return x % 3 ~= 0 end, 37)
 
 
 -- New tester, more cases, reduce verbosity to "only on error".
-t = moonunit.new{ count=10000, progress=500, 
-                  verbose="error_only" }
+t = moonunit.new{ count=10000, verbose="error_only" }
 
 label("Only show errors, enough cases that showing progress matters")
 t:test("flipcoin", function(x) return x end, 
@@ -28,7 +27,7 @@ t:test(function(x) return x end,
 -- Show progress, show arguments on error and failure (default).
 -- Seeds can be made arbitrarily small; if all possible seeds have 
 -- been used, it will terminate the test and print the results.
-t = moonunit.new{ count=1000, progress=100 }
+t = moonunit.new{ count=1000 }
 
 -- String patterns
 label("Test with string pattern")
@@ -56,8 +55,7 @@ t:test("show_error",
 
 
 -- Ints and floats
-t = moonunit.new{ count=1000, progress=100, 
-                       verbose="error_only" }
+t = moonunit.new{ count=1000, verbose="error_only" }
 
 label("Int / float tests")
 t:test("is_pos", function(n) return n >= 0 end, 100)
@@ -91,7 +89,7 @@ t:test("table_length2", function(t) return #t < 6 end, fliptable)
 
 -- This caught a bug in itself. :)
 label("Test that the RNG wrapper matches expected bounds")
-t = moonunit.new{ count=10000, progress=1000 }
+t = moonunit.new{ count=10000 }
 
 local low, high
 for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1}, 

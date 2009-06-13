@@ -308,7 +308,7 @@ function new(opt)
    t._count = opt.count or 100
    t._skips_allowed = opt.skips or 50
    t._verbose = opt.verbose or false
-   t._progress = opt.progress or 10
+   t._progress = opt.progress or t._count / 10
    t._randbound = 2^bits_of_accuracy
    t._out = opt.log or io.stdout
    t._seed_limit = opt.seed_limit or math.min(1e13, 2^bits_of_accuracy)
