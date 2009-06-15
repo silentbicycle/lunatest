@@ -1,9 +1,9 @@
-Moon Unit
-=========
+lunatest
+========
 
 A randomized testing framework for Lua, inspired by Haskell's Quickcheck.
 
-The code for Moon Unit is released under the MIT License.
+The code for lunatest is released under the MIT License.
 
 Please send comments, suggestions, bug reports, limericks, etc. to
 scott@silentbicycle.com .
@@ -28,10 +28,10 @@ if you want it to be loadable system-wide.
 Overview
 --------
 
-    require "moonunit"
+    require "lunatest"
     
-    local t = moonunit.new()
-    local t = moonunit.new{ verbose="error_only" }
+    local t = lunatest.new()
+    local t = lunatest.new{ verbose="error_only" }
     t:test("flipcoin", 
            function(x) return x end, 
            false)
@@ -50,7 +50,7 @@ For further usage examples, see test.lua.
 Tester object
 -------------
 
-The constructor, moonunit.new(), takes an optional table argument, which
+The constructor, lunatest.new(), takes an optional table argument, which
 checks for the following values:
 
   + count (100):         number of tests to run
@@ -153,5 +153,4 @@ Bugs, issues, etc.
 + Running tests with a large $count temporarily eats up a lot of memory,
   since every seed used is stored in a table (to ensure $count unique
   tests). For example, count of 1,000,000 uses approx. 85 MB.
-+ The name sucks.
 + It still needs to be tested with userdata.
