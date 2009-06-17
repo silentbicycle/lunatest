@@ -56,6 +56,7 @@ module(...)
 local RNG = {}          -- prototype for RNG interface
 function RNG:tostring() return "(RNG interface)" end
 -- get_bool()           -> get a random bool
+-- get_choice(list)     -> get a random choice from the list
 -- get_float(bound)     -> get a random float 0 <= x < bound
 -- get_float(low, high) -> get a random float low <= x < high
 -- get_int(bound)       -> get a random int 0 <= x < bound
@@ -212,6 +213,16 @@ end
 -- Random bool. Simple.
 function RNG:get_bool()
    return (self:get_int(0, 2) == 1)
+end
+
+
+-- Get a random choice.
+function RNG:get_choice(array)
+   assert(type(array) == "table", "Must be an array-style table.")
+   local len = #array
+   if len == 0 then error("Not an array.", 2) end
+   local idx = self:get_int(0, len) + 1
+   return array[idx]
 end
 
 

@@ -139,6 +139,7 @@ An RNG object is passed as the first argument to user-supplied test
 functions. It provides the following interface:
 
 + get_bool():             get a random bool
++ get_choice(array):      get a random choice from the array
 + get_float(bound):       get a random float 0 <= x < bound
 + get_float(low, high):   get a random float low <= x < high
 + get_int(bound):         get a random int 0 <= x < bound

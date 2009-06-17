@@ -139,3 +139,18 @@ for run,high in ipairs{ 11, 12, 13 } do
       end
    end
 end
+
+
+label("Testing get_choice() (about 2/3 should fail).")
+t = lunatest.new{ count=10000, verbose="error_only" }
+local chosen = {}
+t:test("pick_door",
+    function(d)
+       chosen[d] = true
+       return d == "doorC"    -- A and B have goats...
+    end,
+    function(r) return r:get_choice{"doorA", "doorB", "doorC"} end)
+
+if not (chosen.doorA and chosen.doorB and chosen.doorC) then
+    print("ERROR -- didn't pick all doors")
+end
