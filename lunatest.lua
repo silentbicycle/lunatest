@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------
 --
--- Copyright (c) 2009 Scott Vokes <scott@silentbicycle.com>
+-- Copyright (c) 2009 Scott Vokes <vokes.s@gmail.com>
 --
 -- Permission is hereby granted, free of charge, to any person
 -- obtaining a copy of this software and associated documentation
@@ -265,18 +265,23 @@ end
 
 -- Process test case args.
 local function proc_args(arglist)
-   local name, pred, args
+   local name, pred, args, always
    if type(arglist[1]) == "string" then
       name = arglist[1]
       table.remove(arglist, 1)
    else name = "" end
+
+   if type(arglist[1]) == "table" then
+      always = arglist[1]
+      table.remove(arglist, 1)
+   else always = {} end
 
    local pred = arglist[1]
    assert(type(pred) == "function",
           "First argument (after optional name) must be trial function.")
    table.remove(arglist, 1)
 
-   return name, pred, arglist
+   return name, pred, always, arglist
 end
 
 
@@ -294,13 +299,13 @@ end
 
 
 -- Show progress, according to verbosity.
-function Tester:show_progress(log, res, seed, trials, 
+function Tester:show_progress(log, res, seed, trials, count,
                               pass, fail, skip, err)
    if self._verbose == true then
       self:log("%-4s %-20s (+%d, -%d, s%d, e%d)\n",
                res, seed, pass, fail, skip, err)
-   elseif (trials % self._progress == 0 and self._count > 0) then
-      self:log "."       -- "Brevity is the soul of wit." - W. S.
+   elseif (trials % self._progress == 0 and count > 0) then
+      self:log "."
    end
 end
 
@@ -318,10 +323,10 @@ function Tester:set_seed(s)
 end
 
 
--- Construct a random testing function.
+-- Construct a random test runner.
 function new(opt)
    opt = opt or {}
-   local t = {}                 --new tester
+   local t = {}                 --new tester object
    t._count = opt.count or 100
    t._skips_allowed = opt.skips or 50
    t._verbose = opt.verbose or false
@@ -338,6 +343,7 @@ function new(opt)
 end
 
 
+-- How many digits long is the max. seed? (for formatting)
 local function seed_digits(t)
    local log = math.log
    return math.floor(log(t._seed_limit) / log(10)) + 1
@@ -346,12 +352,12 @@ end
 
 -- Run an actual test.
 function Tester:test(...)
-   local name, check, args = proc_args{ ... }
-   
+   local name, check, always, args = proc_args{ ... }
    local padded_name = (name ~= "" and name .. ":\t") or ""
+   local count = self._count + #always
 
    self:log("%s%d trials, seed %" .. seed_digits(self) ..
-         "s ", padded_name, self._count, self._seed)
+         "s ", padded_name, count, self._seed)
    if self._verbose == true then self:log("\n") end
    local rng = self.rng
    rng:set_seed(self._seed)
@@ -360,32 +366,39 @@ function Tester:test(...)
    local failed = 0
    local skipped = 0
    local errors = 0
-
-   -- Seeds already tested.
-   local tried = {}
+   local tried = {}             -- Seeds already tested.
+   local initial_seed = rng:get_int(self._seed_limit)
    
-   for trial=1,self._count do
-      -- Get & save the current seed, so we can report it.
-      local cur_seed = rng:get_int(self._seed_limit)
-      local first_tried = cur_seed
-      while tried[cur_seed] do 
-         cur_seed = cur_seed + 1
-         if cur_seed > self._seed_limit then cur_seed = 0
-         elseif cur_seed == first_tried then   --wrapped all available
+
+   -- Get the next seed (from the seeds to always try, if any remain).
+   local function get_next_seed()
+      local nseed
+      if #always > 0 then nseed = table.remove(always) --pop
+      else
+         if initial_seed then
+            nseed = initial_seed --don't start from always[1]
+            initial_seed = nil
+         else
+            -- (Actually based on previous seed.)
+            nseed = rng:get_int(self._seed_limit)
+         end
+      end
+      local first_tried = nseed
+      while tried[nseed] do      --get the next *unique* seed
+         nseed = nseed + 1
+         if nseed > self._seed_limit then nseed = 0
+         elseif nseed == first_tried then   --wrapped all available
             self:log("\nAll seeds <=%d exhausted, (+%d, -%d, s%d, e%d)\n", 
                      self._seed_limit, passed, failed, skipped, errors)
             return passed == trial - 1
          end
       end
-      self:set_seed(cur_seed)
-      tried[cur_seed] = true
+      return nseed
+   end
 
-      local callargs = {}
-      for i=1, #args do
-         callargs[i] = generate_arbitrary(rng, args[i])
-      end
-      local status, res = pcall(check, unpack(callargs))
-      
+
+   -- Determine if that trial passed, failed, etc.
+   local function interpret_status(status, res, cur_seed, callargs)
       if status then         -- completed without error(...)
          -- results of "pass", "skip" caught implicitly
          if res then res = "pass" else res = "fail" end
@@ -414,7 +427,7 @@ function Tester:test(...)
          if skipped > skips_allowed then
             self:log("\n%sWarning -- %d skips at %d of %d trials (+%d, -%d).\n",
                padded_name, skips_allowed, trial, count, passed, failed)
-            return
+            return false, passed, failed, skipped, errors
          end
          
       else
@@ -429,16 +442,32 @@ function Tester:test(...)
             self:log("    %d -- %s\n", idx, tostring(arg))
          end
       end
-      
-      self:show_progress(log, res, cur_seed, trial, passed,
-                         failed, skipped, errors)
+      return res
    end
+
+
+   for trial=1,count do
+      local cur_seed = get_next_seed() --save, so we can report it
+      self:set_seed(cur_seed)
+      tried[cur_seed] = true
+
+      local callargs = {}
+      for i=1, #args do
+         callargs[i] = generate_arbitrary(rng, args[i])
+      end
+      local status, result = pcall(check, unpack(callargs))
+      
+      result = interpret_status(status, result, cur_seed, callargs)
+      
+      self:show_progress(log, result, cur_seed, trial, count,
+                         passed, failed, skipped, errors)
+   end
+   local overall_status = (passed == count and "PASS" or "FAIL")
    
    if self._verbose == true then self:log("total %s", name) end
-   local overall_status = (passed == self._count and "PASS" or "FAIL")
    self:log(" %s (+%d, -%d, s%d, e%d)\n",
             overall_status, passed, failed, skipped, errors)
    if self._verbose == true then self:log("\n") end
    
-   if overall_status == "PASS" then return true end
+   return (overall_status == "PASS"), passed, failed, skipped, errors
 end

@@ -6,7 +6,8 @@ local function label(l) print("\n----- " .. l ) end
 local t = lunatest.new{ verbose=true, count=10 }
 
 label("Verbose, case name")
-t:test("not_div_by_3", function(x) return x % 3 ~= 0 end, 37)
+t:test("not_div_by_3", { 3231431921740 }, --always test that seed
+       function(x) return x % 3 ~= 0 end, 37)
 
 label("Verbose, no case name")
 t:test(function(x) return x % 3 ~= 0 end, 37)
@@ -34,7 +35,7 @@ label("Test with string pattern")
 t:test("has_vowels", 
        function(s) return string.match(s, "[aeiou]") end,
        "50 %l")        -- generate 50 random lowercase letters
-t:test("has_an_x",
+t:test("has_an_x", { 9617133740369 }, -- seed to always test
        function(s) return string.match(s, "x") end,
        "100,150 %l")       -- ususally passes, but not always...
 t:test("has_no_Xs", 
@@ -43,6 +44,9 @@ t:test("has_no_Xs",
 
 label("(Error on 'xx', skip on '  '.)")
 t:test("show_error", 
+       -- Some seeds that raise errors
+       { 5961887444430, 4213055815991, 6406636384987, 514064420559, 
+         4093722260999, 3520618634168, 657564407699 },
        function(s) 
           if string.match(s, "  ") then 
              error("skip")      -- discard this run and retry
@@ -86,9 +90,9 @@ local fliptable = setmetatable( {}, { __index = flipMT })
 t:test("table_length2", function(t) return #t < 6 end, fliptable)
 
 
+------------------------------------------------------------------------
 label "Now, let's test the actual program..."
-
--- This caught a bug in itself. :)
+------------------------------------------------------------------------
 label("Test that the RNG wrapper matches expected bounds")
 t = lunatest.new{ count=1000 }
 

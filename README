@@ -5,18 +5,19 @@ A randomized testing framework for Lua, inspired by Haskell's Quickcheck.
 
 The code for lunatest is released under the MIT License.
 
-Please send comments, suggestions, bug reports, limericks, etc. to
-scott@silentbicycle.com .
+Please send comments, suggestions, bug reports, etc. to
+<vokes.s@gmail.com> .
 
 
 Building and installation
 -------------------------
 
 The only dependency is Luiz Henrique de Figueiredo's [lrandom][]
-library, which is used because it has better statistical properties, and
-because (unlike math.random) its results are consistent cross-platform.
-Note that the May 2009 version is recommended. (The current version in
-the LuaRocks repository is old, and has an incompatible interface.)
+library, which is used because it has better guaranteed statistical
+properties than math.random and its results are consistent across
+platforms. The May 2009 version or newer is recommended. (The version
+currently in the main LuaRocks repository is from 2007, and has an
+incompatible interface.)
 
 [lrandom]: http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
 
@@ -40,18 +41,24 @@ Example output:
 
     flipcoin:       100 trials, seed    1244918064 .......... FAIL (+49, -51, s0, e0)
 
-This runs a test 100 times which generates a random boolean, and
-succeeds when the result == true. The type of "false" tells it to
-generate a bool. ("error_only" prevents displaying every failure.)
+This runs 100 trials, which generate a random boolean and succeed when
+the result is true. The type of "false" tells it to generate a boolean,
+and setting verbose to "error_only" suppresses details for every
+failure.
+
+If lunatest finds failures or errors, you can add their seeds directly
+to the test specification, and they will always be included in
+subsequent trials. (This can be used for simple regression testing.)
 
 For further usage examples, see test.lua.
 
+*****
 
 Tester object
 -------------
 
-The constructor, lunatest.new(), takes an optional table argument, which
-checks for the following values:
+The constructor, lunatest.new(), takes an optional table argument. It
+checks for the following values, otherwise using the listed defaults:
 
   + count (100):         number of tests to run
   + skips (50):          # of tests that can be skipped without error
@@ -63,11 +70,11 @@ checks for the following values:
   + show_progress:       hook for logging, see below
 
 
-### Verbosity:
+### Levels of verbosity:
 
-  + true:          print pass/fail/etc. for every test
-  + false:         show . for progress and error/failure details
+  + false:         show . for progress, details for errors/failures only
   + "error_only":  same as false, but don't show failure details.
+  + true:          print pass/fail/etc. for every test
 
 
 ### Show_progress
@@ -81,26 +88,38 @@ Logging is done by a function which is given nine arguments:
   + pass:   passes
   + fail:   failures
   + skip:   trials skipped
-  + err:    number of trials ended by an error
+  + error:  number of trials ended by an error
 
 
 Tester object interface:
 ------------------------
 
 + log(...):        output string.format(...) to the log file
-+ show_progress(several args): see below
++ show_progress(several args): see above
 + set_seed(s):     set the current seed
-+ test(...):       Run the actual test.
++ test(see below): Run the actual test.
 
-The function is run for every test case, using random arguments
+
+### The test method
+
+test takes the following arguments, in order:
+
++ a label (optional)
++ a list of seeds to always test (optional)
++ the trial function (required)
++ a list of one or more argument specifiers (required)
+
+The trial function is run once for every trial, using random arguments
 specified by the subsequent arguments to t:test. Any value besides
-false, nil, or "skip" is a success; false/nil are failure, and "skip"
-skips this trial. Execution can also be stopped by error(result), i.e.,
-error("pass"), error("fail"), error("skip"). Any other error is reported
-as an actual error. t:test() returns true if all tests pass, nil otherwise.
+false, nil, or "skip" is considered a success; false/nil are failure,
+and "skip" skips this trial. Execution can also be stopped by
+error(result), i.e., error("pass"), error("fail"), error("skip"). Any
+other error is reported as an actual error. 
 
-Arguments after the first function specify how to randomly generate the
-arguments given to it:
+### Argument specifiers
+
+The values after the trial function specify how to randomly generate
+its arguments:
 
   + boolean:  return true or false
   + number n: return 0 <= x < n, or -n <= x < n if n is signed.
@@ -110,12 +129,19 @@ arguments given to it:
               "10 %l" means 10 lowercase letters, "10,30 [aeiou]" means
               between 10 and 30 vowels, inclusive, etc. The standard
               Lua pattern escapes (e.g. %l, %s) are used.
-  + function: Call with a RNG and use the returned value.
-  + table or udata: Same as function, but get it from v.__random,
+  + function: Called with an RNG, uses the returned value.
+  + table or udata: Same as function, but calls value.__random(RNG),
               so it can be defined in the metatable.
 
-For example,
-    t:test("foo", function(a, b, c, d) 
+test returns a boolean of whether all arguments passed, followed by the
+pass, fail, skip, and error counts.
+
+
+### Example
+
+    local t = lunatest.new()
+    t:test("foo", { 316874885789, 1245507938 },
+                  function(a, b, c, d) 
                      return a and b > 0 
                         and string.len(c) > 10 and #d > 3
                   end,
@@ -125,18 +151,22 @@ For example,
            function(r)
               local t = {}
               for i=1,r:get_int(10) do t[#t+1] = "X" end
-              return t
+              return setmetatable(t, { __tostring=function(self) 
+                                                     return table.concat(self)
+                                                  end })
            end)
 
-Generates a bool, a number -20 <= x < 20, a 5-20 character string,
-and a list with 1-9 cells containing "X".
+This generates a bool, a number -20 <= x < 20, a 5-20 character string,
+and a list with 1-9 cells containing "X". (__tostring is used when
+displaying arguments in failed trials.) The seeds 316874885789 and
+1245507938 are always tested, and then there are $count random trials.
 
 
-RNG object
+Random number generator object
 ----------
 
-An RNG object is passed as the first argument to user-supplied test
-functions. It provides the following interface:
+An RNG object is passed to the trial function. It provides the following
+interface:
 
 + get_bool():             get a random bool
 + get_choice(array):      get a random choice from the array
@@ -151,7 +181,6 @@ functions. It provides the following interface:
 Bugs, issues, etc.
 ----------------
 
-+ Running tests with a large $count temporarily eats up a lot of memory,
-  since every seed used is stored in a table (to ensure $count unique
-  tests). For example, count of 1,000,000 uses approx. 85 MB.
-+ It still needs to be tested with userdata.
++ Running tests with a very large $count temporarily uses a lot of
+  memory, since every seed used is stored in a table (to ensure $count
+  unique tests). For example, count of 1,000,000 uses approx. 85 MB.
