@@ -181,6 +181,6 @@ interface:
 Bugs, issues, etc.
 ----------------
 
-+ Running tests with a very large $count temporarily uses a lot of
-  memory, since every seed used is stored in a table (to ensure $count
-  unique tests). For example, count of 1,000,000 uses approx. 85 MB.
++ As tests track every seed used to ensure $count unique seeds, running
+  tests with a very large trial count will temporarily use a lot of
+  memory. For example, 1,000,000 trials uses approx. 85 MB.
