@@ -123,15 +123,17 @@ its arguments:
 
   + boolean:  return true or false
   + number n: return 0 <= x < n, or -n <= x < n if n is signed.
-              If n has a decimal component (other than .0), then
-              a random value < 1.0 will be added.
+
+    If n has a decimal component (other than .0), then
+    a random value < 1.0 will be added.
   + string:   Generate by pattern.
-              "10 %l" means 10 lowercase letters, "10,30 [aeiou]" means
-              between 10 and 30 vowels, inclusive, etc. The standard
-              Lua pattern escapes (e.g. %l, %s) are used.
+
+    "10 %l" means 10 lowercase letters, "10,30 [aeiou]" means
+    between 10 and 30 vowels, inclusive, etc. The standard
+    Lua pattern escapes (e.g. %l, %s) are used.
   + function: Called with an RNG, uses the returned value.
   + table or udata: Same as function, but calls value.__random(RNG),
-              so it can be defined in the metatable.
+    so it can be defined in the metatable.
 
 test returns a boolean of whether all arguments passed, followed by the
 pass, fail, skip, and error counts.
@@ -181,6 +183,6 @@ interface:
 Bugs, issues, etc.
 ----------------
 
-+ Running tests with a very large $count temporarily uses a lot of
-  memory, since every seed used is stored in a table (to ensure $count
-  unique tests). For example, count of 1,000,000 uses approx. 85 MB.
++ As tests track every seed used to ensure $count unique seeds, running
+  tests with a very large trial count will temporarily use a lot of
+  memory. For example, 1,000,000 trials uses approx. 85 MB.
