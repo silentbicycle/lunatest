@@ -354,7 +354,8 @@ function Tester:test(...)
          "s ", padded_name, self._count, self._seed)
    if self._verbose == true then self:log("\n") end
    local rng = self.rng
-   
+   rng:set_seed(self._seed)
+
    local passed = 0
    local failed = 0
    local skipped = 0
