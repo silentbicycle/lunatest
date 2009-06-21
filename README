@@ -1,29 +1,19 @@
-lunatest
+Lunatest
 ========
 
 A randomized testing framework for Lua, inspired by Haskell's Quickcheck.
 
 The code for lunatest is released under the MIT License.
 
+**Current version**: 0.7 ([TAR][] / [ZIP][])
+
+[TAR]: http://silentbicycle.com/projects/lunatest/lunatest-0.7.tar.gz
+[ZIP]: http://silentbicycle.com/projects/lunatest/lunatest-0.7.zip
+
+Homepage: <http://silentbicycle.com/projects/lunatest/>
+
 Please send comments, suggestions, bug reports, etc. to
 <vokes.s@gmail.com> .
-
-
-Building and installation
--------------------------
-
-The only dependency is Luiz Henrique de Figueiredo's [lrandom][]
-library, which is used because it has better guaranteed statistical
-properties than math.random and its results are consistent across
-platforms. The May 2009 version or newer is recommended. (The version
-currently in the main LuaRocks repository is from 2007, and has an
-incompatible interface.)
-
-[lrandom]: http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
-
-This module is written in pure Lua, so there's no need to build it. You
-can copy it into your Lua module path (e.g. /usr/local/share/lua/5.1/)
-if you want it to be loadable system-wide.
 
 
 Overview
@@ -52,7 +42,22 @@ subsequent trials. (This can be used for simple regression testing.)
 
 For further usage examples, see test.lua.
 
-*****
+Building and installation
+-------------------------
+
+The only dependency is Luiz Henrique de Figueiredo's [lrandom][]
+library, which is used because it has better guaranteed statistical
+properties than math.random and its results are consistent across
+platforms. The May 2009 version or newer is recommended. (The version
+currently in the main LuaRocks repository is from 2007, and has an
+incompatible interface.)
+
+[lrandom]: http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
+
+This module is written in pure Lua, so there's no need to build it. You
+can copy it into your Lua module path (e.g. /usr/local/share/lua/5.1/)
+if you want it to be loadable system-wide.
+
 
 Tester object
 -------------
