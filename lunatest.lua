@@ -34,35 +34,586 @@
 -- Module --
 ------------
 
--- standard library dependencies
-local io, math, os, string, table = io, math, os, string, table
+-- standard libraries used
+local debug, io, math, os, string, table =
+   debug, io, math, os, string, table
 
--- require lhf's random, from 
+-- required core global functions
+local assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber =
+   assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber
+local fmt, tostring, type, unpack = string.format, tostring, type, unpack
+local getmetatable, setmetatable, xpcall = getmetatable, setmetatable, xpcall
+
+-- Get containing env, Lua 5.1 and 5.2-compatible.
+local getenv = getfenv or debug.getfenv
+
+---Use lhf's random, if available. It provides an RNG with better
+-- statistical properties, and it gives consistent values across OSs.
 -- http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
-local random = require "random"
+pcall(require, "random")
+local random = random
 
--- required core global funs
-local assert, error, ipairs, pcall, print, setmetatable, tonumber =
-   assert, error, ipairs, pcall, print, setmetatable, tonumber
-local tostring, type, unpack = tostring, type, unpack
+---If available, use luasocket's gettime() for timestamps.
+pcall(require, "socket")
+local now = socket and socket.gettime
 
-module(...)
+-- Get env immediately wrapping module, to put assert_ tests there.
+local _importing_env = getenv()
+local dump = my.dump
 
 
--------------------
--- RNG Interface --
--------------------
+-- #####################
+-- # Utility functions #
+-- #####################
 
-local RNG = {}          -- prototype for RNG interface
-function RNG:tostring() return "(RNG interface)" end
--- get_bool()           -> get a random bool
--- get_float(bound)     -> get a random float 0 <= x < bound
--- get_float(low, high) -> get a random float low <= x < high
--- get_int(bound)       -> get a random int 0 <= x < bound
--- get_int(low, high)   -> get a random int low <= x < high
--- get_string(spec)     -> get a random string, according to spec
--- set_seed(s)          -> set the new random seed to s
+local function printf(...) print(string.format(...)) end
 
+local function result_table(name)
+   return { name=name, pass={}, fail={}, skip={}, err={} }
+end
+
+local function combine_results(to, from)
+   local s_name = from.name
+   for _,set in ipairs{"pass", "fail", "skip", "err" } do
+      local fs, ts = from[set], to[set]
+      for name,val in pairs(fs) do
+         ts[s_name .. "." .. name] = val
+      end
+   end
+end
+
+local function is_func(v) return type(v) == "function" end
+
+local function count(t)
+   local ct = 0
+   for _ in pairs(t) do ct = ct + 1 end
+   return ct
+end
+
+
+-- ###########
+-- # Results #
+-- ###########
+
+local RPass = {}
+local passMT = {__index=RPass}
+function RPass:tostring_char() return "." end
+function RPass:add(s, name) s.pass[name] = self end
+function RPass:type() return "pass" end
+function RPass:tostring(name)
+   return fmt("PASS: %s()%s", name, self.template or "")
+end
+
+
+local RFail = {}
+local failMT = {__index=RFail}
+function RFail:tostring_char() return "F" end
+function RFail:add(s, name) s.fail[name] = self end
+function RFail:type() return "fail" end
+function RFail:tostring(name)
+   return fmt("FAIL: %s(): " .. (self.template or "Expected %q, got %q%s"),
+              name, tostring(self.exp or ""),
+              tostring(self.got or ""),
+              self.msg and (" - " .. self.msg) or "")
+end
+
+
+local RSkip = {}
+local skipMT = {__index=RSkip}
+function RSkip:tostring_char() return "s" end
+function RSkip:add(s, name) s.skip[name] = self end
+function RSkip:type() return "skip" end
+function RSkip:tostring(name)
+   return fmt("SKIP: %s()", name)
+end
+
+
+local RError = {}
+local errorMT = {__index=RError}
+function RError:tostring_char() return "E" end
+function RError:add(s, name) s.err[name] = self end
+function RError:type() return "error" end
+function RError:tostring(name)
+   return self.msg or
+      fmt("ERROR (in %s(), couldn't get traceback)", name)
+end
+
+
+local function genRes(mt, t)
+   return setmetatable(t, mt)
+end 
+
+
+local function Pass(t) return setmetatable(t or {}, passMT) end
+local function Fail(t) return setmetatable(t, failMT) end
+local function Skip(t) return setmetatable(t, skipMT) end
+local function Error(t) return setmetatable(t, errorMT) end
+
+
+-- ##############
+-- # Assertions #
+-- ##############
+
+---Renamed standard assert.
+old_assert = assert
+local checked = 0
+
+local function wraptest(flag, t)
+   template = template or "Expected %q, got %q%s"
+   checked = checked + 1
+   if not flag then
+      error(Fail(t))
+   end
+end
+
+function fail(msg) error(Fail { msg=msg, template="(Failed)" }) end
+function skip(msg) error(Skip { msg=msg }) end
+
+
+---got == true.
+function assert(got, msg)
+   wraptest(got, { exp=true, got=got, msg=msg,
+                   template="Expected success." })
+end
+
+assert_true = assert
+
+---got == false.
+function assert_false(got, msg)
+   wraptest(not got, { exp="false", got=got, msg=msg,
+                       template="Expected %s, got %s%s" })
+end
+
+--got == nil
+function assert_nil(got, msg)
+   wraptest(got == nil, { exp="nil", got=got, msg=msg })
+end
+
+--got ~= nil
+function assert_not_nil(got, msg)
+   wraptest(got ~= nil, { exp="nil", got=got, msg=msg })
+end
+
+---exp == got.
+function assert_equal(exp, got, msg)
+   wraptest(exp == got, { exp=exp, got=got, msg=msg })
+end
+
+---exp ~= got.
+function assert_not_equal(exp, got, msg)
+   wraptest(exp ~= got, { exp=exp, got=got, msg=msg })
+end
+
+---val > lim.
+function assert_gt(lim, val, msg)
+   wraptest(val > lim, { exp=lim, got=val, msg=msg })
+end
+
+---val >= lim.
+function assert_gte(lim, val, msg)
+   wraptest(val >= lim, { exp=lim, got=val, msg=msg })
+end
+
+---val < lim.
+function assert_lt(lim, val, msg)
+   wraptest(val < lim, { exp=lim, got=val, msg=msg })
+end
+
+---val <= lim.
+function assert_lte(lim, val, msg)
+   wraptest(val <= lim, { exp=lim, got=val, msg=msg })
+end
+
+---#val == len.
+function assert_len(len, val, msg)
+   wraptest(#val == len, { exp=lim, got=val, msg=msg })
+end
+
+---#val ~= len.
+function assert_not_len(len, val, msg)
+   wraptest(#val ~= len, { exp=lim, got=val, msg=msg })
+end
+
+---Test that the string s matches the pattern exp.
+function assert_match(exp, s, msg)
+   wraptest(exp:match(s), { exp=exp, got=s, msg=msg,
+                              template="Expected pattern to match" })
+end
+
+---Test that the string s doesn't match the pattern exp.
+function assert_not_match(exp, s, msg)
+   wraptest(not exp:match(s),
+            { exp=exp, got=s, msg=msg,
+              template="Expected pattern to not match" })
+end
+
+---Test that val is a boolean.
+function assert_boolean(val, msg)
+   wraptest(type(val) == "boolean",
+            { exp="boolean", got=type(val), msg=ms,
+              template="Expected type of %s but got type %s%s" })
+end
+
+---Test that val is not a boolean.
+function assert_not_boolean(val, msg)
+   wraptest(type(val) ~= "boolean",
+            { exp="boolean", got=type(val), msg=ms,
+              template="Expected type other than %s but got type %s%s" })
+end
+
+---Test that val is a number.
+function assert_number(val, msg)
+   wraptest(type(val) == "number",
+            { exp="number", got=type(val), msg=msg,
+              template"Expected type of %s but got type %s%s" })
+end
+
+---Test that val is not a number.
+function assert_not_number(val, msg)
+   wraptest(type(val) ~= "number",
+            { exp="number", got=type(val), msg=msg,
+              template"Expected type other than %s but got type %s%s" })
+end
+
+---Test that val is a string.
+function assert_string(val, msg)
+   wraptest(type(val) == "string",
+            { exp="string", got=type(val), msg=msg,
+              template="Expected type of %s but got type %s%s" })
+end
+
+---Test that val is not a string.
+function assert_not_string(val, msg)
+   wraptest(type(val) ~= "string",
+            { exp="string", got=type(val), msg=msg,
+              template="Expected type other than %s but got type %s%s" })
+end
+
+---Test that val is a table.
+function assert_table(val, msg)
+   wraptest(type(val) == "table",
+            { exp="table", got=type(val), msg=msg,
+              template="Expected type of %s but got type %s%s" })
+end
+
+---Test that val is not a table.
+function assert_not_table(val, msg)
+   wraptest(type(val) ~= "table",
+            { exp="table", got=type(val), msg=msg,
+              template="Expected type other than %s but got type %s%s" })
+end
+
+---Test that val is a function.
+function assert_function(val, msg)
+   wraptest(type(val) == "function",
+            { exp="function", got=type(val), msg=msg,
+              template="Expected type of %s but got type %s%s" })
+end
+
+---Test that val is not a function.
+function assert_function(val, msg)
+   wraptest(type(val) ~= "function",
+            { exp="function", got=type(val), msg=msg,
+              template="Expected type other than %s but got type %s%s" })
+end
+
+---Test that val is a thread (coroutine).
+function assert_thread(val, msg)
+   wraptest(type(val) == "thread",
+            { exp="thread", got=type(val), msg=msg,
+              template="Expected type of %s but got type %s%s" })
+end
+
+---Test that val is not a thread (coroutine).
+function assert_not_thread(val, msg)
+   wraptest(type(val) ~= "thread",
+            { exp="thread", got=type(val), msg=msg,
+              template="Expected type other than %s but got type %s%s" })
+end
+
+---Test that val is a userdata (light or heavy).
+function assert_userdata(val, msg)
+   wraptest(type(val) == "userdata",
+            { exp="userdata", got=type(val), msg=msg,
+              template="Expected type of %s but got type %s%s" })
+end
+
+---Test that val is not a userdata (light or heavy).
+function assert_not_userdata(val, msg)
+   wraptest(type(val) ~= "userdata",
+            { exp="userdata", got=type(val), msg=msg,
+              template="Expected type other than %s but got type %s%s" })
+end
+
+---Test that a value has the expected metatable.
+function assert_metatable(exp, val, msg)
+   local mt = getmetatable(val)
+   wraptest(mt == exp,
+            { exp=exp, got=mt, msg=msg,
+              template="Expected metatable %s but got %s%s" })
+end
+
+---Test that a value does not have a given metatable.
+function assert_not_metatable(exp, val, msg)
+   local mt = getmetatable(val)
+   wraptest(mt ~= exp,
+            { exp=exp, got=mt, msg=msg,
+              template="Expected metatable other than %s but got %s%s" })
+end
+
+---Test that the function raises an error when called.
+function assert_error(f, msg)
+   local ok, err = pcall(f)
+   wraptest(not ok,
+            { exp="an error", got=ok or err, msg=msg,
+              template="Expected an error" })
+end
+
+
+---Run a test case with randomly instantiated arguments,
+-- running the test function f opt.count (default: 100) times.
+-- @param opt A table with options, or just a test name string.<br>
+--    opt.count: how many random trials to perform<br>
+--    opt.seed: Start the batch of trials with a specific seed<br>
+--    opt.always: Always test these seeds (for regressions)<br>
+--    opt.show_progress: Whether to print a . after every opt.tick trials.<br>
+--    opt.seed_limit: Max seed to allow.<br>
+--    opt.max_failures, max_errors, max_skips: Give up after X of each.<br>
+-- @param f A test function, run as f(unpack(randomized_args(...)))
+-- @param ... the arg specification. For each argument, creates a
+--    random instance of that type.<br>
+--    boolean: return true or false<br>
+--    number n: returns 0 <= x < n, or -n <= x < n if negative.
+--              If n has a decimal component, so will the result.<br>
+--    string: Specifiedd as "(len[,maxlen]) (pattern)".<br>
+--        "10 %l" means 10 random lowercase letters.<br>
+--        "10,30 [aeiou]" means between 10-30 vowels.<br>
+--    function: Just call (as f()) and return result.<br>
+--    table or userdata: Call v.__random() and return result.<br>
+-- @usage 
+function assert_random(opt, f, ...)
+   -- Stub. Exported to the same namespace, but code appears below.
+end
+
+
+-- ####################
+-- # Module beginning #
+-- ####################
+
+---Unit testing module, with extensions for random testing.
+module("lunatest")
+
+
+-- #########
+-- # Hooks #
+-- #########
+
+local iow = io.write
+
+local function print_totals(r)
+   local ps, fs = count(r.pass), count(r.fail)
+   local ss, es = count(r.skip), count(r.err)
+   local buf = {"\n---------- Tests finished, ",
+                "with %d check(s) ----------\n",
+                "  %d passed, %d failed, ",
+                "%d error(s), %d skipped."}
+   printf(table.concat(buf), checked, ps, fs, es, ss)
+end
+
+
+---Default behavior.
+default_hooks = {
+   begin = false,
+   begin_suite = function(s_env, tests)
+                    iow(fmt("-- Starting suite %q, %d test(s)\n  ",
+                            s_env.name, count(tests)))
+                 end,
+   end_suite = false,
+   pre_test = false,
+   post_test = function(name, res) iow(res:tostring_char()) end,
+   done = function(r)
+             print_totals(r)
+             for _,ts in ipairs{ r.fail, r.err } do
+                for name,res in pairs(ts) do
+                   print(res:tostring(name))
+                end
+             end
+          end
+}
+
+
+---Default verbose behavior.
+verbose_hooks = {
+   begin = function(res, suites)
+              local s_ct = count(suites)
+              if s_ct > 0 then
+                 printf("Starting tests, %d suite(s)", s_ct)
+              end
+           end,
+   begin_suite = function(s_env, tests)
+                    printf("-- Starting suite %q, %d test(s)",
+                           s_env.name, count(tests))
+                 end,
+   end_suite =
+      function(s_env)
+         local ps, fs = count(s_env.pass), count(s_env.fail)
+         local ss, es = count(s_env.skip), count(s_env.err)
+         printf("  * Finished suite %q, +%d -%d E%d s%d",
+                s_env.name, ps, fs, es, ss)
+      end,
+   pre_test = false,
+   post_test = function(name, res)
+                  printf(res:tostring(name))
+               end,
+   done = function(r) print_totals(r) end
+}
+
+setmetatable(verbose_hooks, {__index = default_hooks })
+
+
+-- ################
+-- # Registration #
+-- ################
+
+local suites = { }
+
+---Check if a function name should be considered a test key.
+function is_test_key(k)
+   return type(k) == "string" and k:match("_*test.*")
+end
+
+local function get_tests(mod)
+   local ts = {}
+   for k,v in pairs(mod) do
+      if is_test_key(k) and type(v) == "function" then
+         ts[k] = v
+      end
+   end
+   return ts
+end
+
+
+---Add a file as a test suite.
+-- @param modname The module to load as a suite. The file is
+-- interpreted in the same manner as require "modname". All
+-- functions whose names begin or end with "test" (optionally
+-- preceded by _s) will be added as test cases.
+function suite(modname)
+   local ok, err = pcall(
+      function()
+         local mod = require(modname)
+         suites[modname] = get_tests(s)
+      end)
+   if not ok then
+      print("Error loading test suite: " .. modname)
+   end
+end
+
+
+-- ###########
+-- # Running #
+-- ###########
+
+local ok_types = { pass=true, fail=true, skip=true }
+
+local function err_handler(name)
+   return function (e)
+             if e.type and ok_types[e.type()] then return e end
+             local msg = fmt("ERROR in %s():\n\t%s", name, tostring(e))
+             msg = debug.traceback(msg, 3)
+             return Error { msg=msg }
+          end
+end
+
+
+local function run_test(name, test, suite, hooks)
+   local result
+   if is_func(hooks.pre_test) then hooks.pre_test(name) end
+   local t_pre, t_post          --timestamps. requires luasocket.
+   if now then t_pre = now() end
+   if is_func(suite.setup) then suite.setup(name) end
+   
+   local ok, err = xpcall(test, err_handler(name))
+   if ok then err = Pass() end
+   result = err
+
+   -- TODO: log tests w/ no assertions?
+   result:add(suite, name)
+
+   if is_func(suite.teardown) then suite.teardown(name) end
+   if now then t_post = now() end
+   if t_pre and t_post then result.elapsed = t_post - t_pre end
+   if is_func(hooks.post_test) then hooks.post_test(name, result) end
+end
+
+
+---Run all known test suites, with given configuration hooks.
+-- @param hooks Override the default hooks.
+-- @param just Only run a specific suite. TODO
+function run(hooks, just)
+   -- also check the namespace it's run in
+   hooks = hooks or {}
+   setmetatable(hooks, {__index = default_hooks})
+
+   local results = result_table("main")
+
+   local env = getenv(3)
+   if env then suites.main = get_tests(env) end
+
+   if hooks.begin then hooks.begin(results, suites) end
+
+   for sname,tests in pairs(suites) do
+      local t_ct = count(tests)
+      if t_ct > 0 then
+         local suite = result_table(sname)
+         if hooks.begin_suite then hooks.begin_suite(suite, tests) end
+         suite.tests = suite
+         for name, test in pairs(tests) do
+            run_test(name, test, suite, hooks)
+         end
+         if hooks.end_suite then hooks.end_suite(suite) end
+         combine_results(results, suite)
+      end
+   end
+   if hooks.done then hooks.done(results) end
+   return results
+end
+
+
+-- ########################
+-- # Randomization basics #
+-- ########################
+
+local _r
+if random then
+   _r = random.new()
+end
+
+---Set random seed.
+function set_seed(s) _r:seed(s) end
+
+---Get a random value low <= x <= high.
+function random_int(low, high)
+   return _r:value(low, high)
+end
+
+---Get a random bool.
+function random_bool() return random_int(0, 1) == 1 end
+
+---Get a random float low <= x < high.
+function random_float(low, high)
+   return get_int(low, high) + _r:value()
+end
+
+
+if not random then
+   set_seed = math.randomseed
+   random_bool = function() return math.random(0, 1) == 1 end
+   random_int = function(l, h) return math.random(l, h) end
+   random_float = function(l, h)
+                     return random_int(l, h - 1) + math.random()
+                  end
+end
 
 -- Lua_number's bits of precision. IEEE 754 doubles have 52.
 local function determine_accuracy()
@@ -73,59 +624,13 @@ local function determine_accuracy()
 end
 local bits_of_accuracy = determine_accuracy()
 
--- Metatable for RNG objects
-local RNGmt = { __index=RNG, __tostring=RNG.tostring }
 
-RNG.set_seed = function(self, s) self._r:seed(s) end
-local valuelh = function(self, low, hi) return self._r:value(low, hi - 1) end
-RNG.new = function()
-             return setmetatable({ _r = random.new() }, RNGmt)
-          end
+-- ##################
+-- # Random strings #
+-- ##################
 
 
--- Get a random int.
--- r:get_int(3)       ->   0 <= x < 3
--- r:get_int(-2, 10)  ->  -2 <= x < 10
-RNG.get_int = function(self, low, hi)
-                 if hi then 
-                    assert(hi > low, "Bad range")
-                    return valuelh(self, low, hi)
-                 else 
-                    if low <= 1 then 
-                    error("For get_int(n), n must be > 1.") 
-                    end
-                    return valuelh(self, 0, low - 1)
-                 end
-              end
-
-
--- Get a random float.
--- r:get_float(3, 5)  ->  3.0 <= x < 5.0
-RNG.get_float = function(self, low, hi)
-                   return self:get_int(low, hi) + self._r:value()
-                end
-
-
---------------------
--- Random strings --
---------------------
-
--- For valid char classes, see Lua Reference Manual 5.1, p. 77
--- or http://www.lua.org/manual/5.1/manual.html#5.4.1 .
-local function charclass(pat)
-   local m = {}
-
-   local match, char = string.match, string.char
-   for i=0,255 do
-      local c = char(i)
-      if match(c, pat) then m[#m+1] = c end
-   end
-
-   return table.concat(m)
-end
-
-
--- Return a (RNG -> random char) iterator from a pattern.
+-- Return a (() -> random char) iterator from a pattern.
 local function parse_pattern(pattern)
    local cs = {}                --charset
    local idx = 1
@@ -166,8 +671,8 @@ local function parse_pattern(pattern)
    local len = string.len(cs)
    assert(len > 0, "Empty charset")
 
-   return function(r)
-             local idx = r:get_int(len) + 1
+   return function()
+             local idx = random_int(0, len) + 1
              return string.sub(cs, idx, idx)
           end
 end
@@ -188,64 +693,61 @@ local function parse_randstring(s)
 end
 
 
--- Use with arg e.g. "20 listoftwentycharstogenerate" or "10,20 %l".
-function RNG:get_string(arg)
-   local spec = assert(parse_randstring(arg), "bad pattern")
+-- Generate a random string.
+-- @usage e.g. "20 listoftwentycharstogenerate" or "10,20 %l".
+function random_string(spec)
+   local info = parse_randstring(spec)
    local ct, diff
-   diff = spec.high - spec.low
-   if diff == 0 then ct = spec.low else
-      ct = self:get_int(diff + 2) + spec.low
+   diff = info.high - info.low
+   if diff == 0 then ct = info.low else
+      ct = random_int(diff + 2) + info.low
    end
-
+   
    local acc = {}
    for i=1,ct do
-      acc[i] = spec.gen(self)
+      acc[i] = info.gen(self)
    end
    return table.concat(acc)
 end
 
 
------------------
--- Other types --
------------------
-
--- Random bool. Simple.
-function RNG:get_bool()
-   return (self:get_int(0, 2) == 1)
-end
-
+-- #########################
+-- # General random values #
+-- #########################
 
 -- Generate a random number, according to arg.
-local function gen_number(r, arg)
+local function gen_number(arg)
+   arg = arg or math.huge
    local signed = (arg < 0)
    local float
    if signed then float = (math.ceil(arg) ~= arg) else
       float = (math.floor(arg) ~= arg)
    end
 
-   local f = float and r.get_float or r.get_int
+   local f = float and random_float or random_int
    if signed then
-      return f(r, arg, -arg)
+      return f(arg, -arg)
    else
-      return f(r, arg)
+      return f(arg)
    end
 end
 
 
 -- Create an arbitrary instance of a value.
-local function generate_arbitrary(r, arg)
+local function generate_arbitrary(arg)
    local t = type(arg)
    if t == "number" then
-      return gen_number(r, arg)
+      return gen_number(arg)
    elseif t == "function" then
-      return arg(r)                   -- assume f(r) -> val
+      return arg(gen_number())        -- assume f(number) -> val
    elseif t == "string" then
-      return r:get_string(arg)
+      return random_string(arg)
    elseif t == "table"  or t == "userdata" then
       assert(arg.__random, t .. " has no __random method")
-      return arg.__random(r)          -- assume arg.__random(r) -> val
+      -- assume arg.__random(number) -> val
+      return arg.__random(gen_number())
    elseif t == "boolean" then
-      return r:get_bool()
+      return random_bool()
    else
       error("Cannot randomly generate values of type " .. t .. ".")
    end
@@ -269,164 +771,132 @@ local function proc_args(arglist)
 end
 
 
------------------
--- Test runner --
------------------
-
-local Tester = {}               -- tester prototype
-
--- Log progress.
-function Tester:log(...) 
-   self._out:write(string.format(...)) 
-   io.flush(self._out)
-end
-
-
--- Show progress, according to verbosity.
-function Tester:show_progress(log, res, seed, trials, 
-                              pass, fail, skip, err)
-   if self._verbose == true then
-      self:log("%-4s %-20s (+%d, -%d, s%d, e%d)\n",
-               res, seed, pass, fail, skip, err)
-   elseif (trials % self._progress == 0 and self._count > 0) then
-      self:log "."       -- "Brevity is the soul of wit." - W. S.
-   end
-end
-
-
-function Tester:tostring() 
-   return string.format([[
-(random_tester {seed=%d, verbose=%s, progress=%d, skips_allowed=%d} )]],
-    self._seed, tostring(self._verbose or false), 
-    self._progress, self._skips_allowed)
-end
-
-function Tester:set_seed(s) 
-   self._seed = s
-   self.rng:set_seed(s) 
-end
-
-
--- Construct a random testing function.
-function new(opt)
-   opt = opt or {}
-   local t = {}                 --new tester
-   t._count = opt.count or 100
-   t._skips_allowed = opt.skips or 50
-   t._verbose = opt.verbose or false
-   t._progress = opt.progress or t._count / 10
-   t._randbound = 2^bits_of_accuracy
-   t._out = opt.log or io.stdout
-   t._seed_limit = opt.seed_limit or math.min(1e13, 2^bits_of_accuracy)
-   t._seed = opt.seed or os.time() % t._seed_limit
-
-   t.show_progress = opt.show_progress   -- optionally replace progress hook
-   t.rng = RNG.new()
-
-   return setmetatable(t, { __index=Tester, __tostring=Tester.tostring })
-end
-
+local random_test_defaults = {
+   count = 100,
+   max_failures = 10,
+   max_errors = 5,
+   max_skips = 50,
+   random_bound = 2^bits_of_accuracy,
+   seed_limit = math.min(1e13, 2^bits_of_accuracy),
+   always = {},
+   seed = nil,
+   show_progress = false,
+   tick = 10,
+}
 
 local function seed_digits(t)
-   local log = math.log
-   return math.floor(log(t._seed_limit) / log(10)) + 1
+   return math.floor(math.log(t.seed_limit) / math.log(10)) + 1
 end
 
 
--- Run an actual test.
-function Tester:test(...)
-   local name, check, args = proc_args{ ... }
-   
-   local padded_name = (name ~= "" and name .. ":\t") or ""
+local function random_args(args)
+   local as = {}
+   for i=1,#args do
+      as[i] = generate_arbitrary(args[i])
+   end
+   return as
+end
 
-   self:log("%s%d trials, seed %" .. seed_digits(self) ..
-         "s ", padded_name, self._count, self._seed)
-   if self._verbose == true then self:log("\n") end
-   local rng = self.rng
-   
-   local passed = 0
-   local failed = 0
-   local skipped = 0
-   local errors = 0
 
-   -- Seeds already tested.
-   local tried = {}
-   
-   for trial=1,self._count do
-      -- Get & save the current seed, so we can report it.
-      local cur_seed = rng:get_int(self._seed_limit)
-      local first_tried = cur_seed
-      while tried[cur_seed] do 
-         cur_seed = cur_seed + 1
-         if cur_seed > self._seed_limit then cur_seed = 0
-         elseif cur_seed == first_tried then   --wrapped all available
-            self:log("\nAll seeds <=%d exhausted, (+%d, -%d, s%d, e%d)\n", 
-                     self._seed_limit, passed, failed, skipped, errors)
-            return passed == trial - 1
-         end
-      end
-      self:set_seed(cur_seed)
-      tried[cur_seed] = true
+local function new_seed(limit)
+   limit = limit or 1e13
+   return random_int(0, limit)
+end
 
-      local callargs = {}
-      for i=1, #args do
-         callargs[i] = generate_arbitrary(rng, args[i])
+
+local function get_seeds(t)
+   local ss = {}
+   for _,r in ipairs(t) do
+      if r.seed then ss[#ss+1] = r.seed end
+   end
+   return ss
+end
+
+
+local function run_randtest(seed, f, args, r, limit)
+   local try_ct = 0
+   while r.tried[seed] and try_ct < 50 do
+      seed = new_seed(limit)
+      try_ct = try_ct + 1
+   end
+   if try_ct >= 50 then
+      error(Fail { template = "Exhausted all seeds" })
+   end
+   set_seed(seed)
+   r.tried[seed] = true
+   local r_args = random_args(args)
+   local ok, err = pcall(function() f(unpack(r_args)) end)
+   if ok then
+      err = Pass()
+      err.seed = seed
+      r.ps[#r.ps+1] = err
+   else
+      result = err
+      result.seed = seed
+      local rt = result:type()
+      if rt == "pass" then r.ps[#r.ps+1] = err
+      elseif rt == "fail" then r.fs[#r.fs+1] = err
+      elseif rt == "error" then r.es[#r.es+1] = err
+      elseif rt == "skip" then r.ss[#r.ss+1] = err
+      else error("unmatched")
       end
-      local status, res = pcall(check, unpack(callargs))
-      
-      if status then         -- completed without error(...)
-         -- results of "pass", "skip" caught implicitly
-         if res then res = "pass" else res = "fail" end
-      else   -- actual error or error("skip"), error("fail"), etc.
-         local ok = { pass=true, skip=true, fail=true }
-         local errval = res
-         res = string.sub(res, -4) -- error is preceded by file:line
-         if not ok[res] then
-            res = "error"
-            self:log("\nERROR: seed %d, %s", cur_seed,
-                     res or "(error() returned nil)")
-            errors = errors + 1
-         end
-      end
-      
-      if res == "pass" then passed = passed + 1
-      elseif res == "fail" then
-         if self._verbose ~= "error_only" then
-            self:log("\n%sFailed -- %s (+%d, -%d)",
-               padded_name, cur_seed, passed, failed)
-         end
-         failed = failed + 1
-         
-      elseif res == "skip" then
-         skipped = skipped + 1
-         if skipped > skips_allowed then
-            self:log("\n%sWarning -- %d skips at %d of %d trials (+%d, -%d).\n",
-               padded_name, skips_allowed, trial, count, passed, failed)
-            return
-         end
-         
-      else
-         assert(res == "error")
-         errors = errors + 1
-      end
-      
-      if (res == "fail" and self._verbose ~= "error_only")
-         or res == "error" then
-         self:log("\n")
-         for idx,arg in ipairs(callargs) do
-            self:log("    %d -- %s\n", idx, tostring(arg))
-         end
-      end
-      
-      self:show_progress(log, res, cur_seed, trial, passed,
-                         failed, skipped, errors)
    end
    
-   if self._verbose == true then self:log("total %s", name) end
-   local overall_status = (passed == self._count and "PASS" or "FAIL")
-   self:log(" %s (+%d, -%d, s%d, e%d)\n",
-            overall_status, passed, failed, skipped, errors)
-   if self._verbose == true then self:log("\n") end
-   
-   if overall_status == "PASS" then return true end
+   seed = new_seed(limit)
+   r.ts = r.ts + 1
+   return seed
 end
+
+
+local function assert_random(opt, f, ...)
+   local args = { ... }
+   if type(opt) == "string" then
+      opt = { name=opt }
+   elseif type(opt) == "function" then
+      table.insert(args, 1, f)
+      f = opt
+      opt = {}
+   end
+      
+   setmetatable(opt, { __index=random_test_defaults })
+
+   local seed = opt.seed or os.time()
+
+   local r = { ps={}, fs={}, es={}, ss={}, ts=0, tried={} }
+
+   -- Run these seeds every time, for easy regression testing.
+   for _,s in ipairs(opt.always) do
+      run_randtest(s, f, args, r, opt.seed_limit)
+   end
+
+   for i=1,opt.count do
+      seed = run_randtest(seed, f, args, r, opt.seed_limit)
+      if #r.ss > opt.max_skips or
+         #r.fs > opt.max_failures or
+         #r.es > opt.max_errors then break
+      end
+      if opt.show_progress and i % opt.tick == 0 then iow(".") end
+   end
+   
+   if #r.es > 0 then
+      local seeds = get_seeds(r.es)
+      error(Fail { template = fmt("%d tests, %d error(s).\n   %s",
+                                  r.ts, #r.es,
+                                  table.concat(seeds, "\n   ")),
+                   seeds = seeds})
+   elseif #r.fs > 0 then
+      local seeds = get_seeds(r.fs)
+      error(Fail { template = fmt("%d tests, %d failure(s).\n   %s",
+                                  r.ts, #r.fs,
+                                  table.concat(seeds, "\n   ")),
+                   seeds = seeds})
+   elseif #r.ss >= opt.max_skips then
+      error(Fail { template = fmt("Too many cases skipped.")})
+   else
+      error(Pass { template = fmt(": %d cases passed.", #r.ps) })
+   end
+end
+
+
+-- Put it in the same namespace as the other assert_ functions.
+_importing_env.assert_random = assert_random
