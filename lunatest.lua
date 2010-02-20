@@ -101,7 +101,9 @@ function RPass:tostring_char() return "." end
 function RPass:add(s, name) s.pass[name] = self end
 function RPass:type() return "pass" end
 function RPass:tostring(name)
-   return fmt("PASS: %s()%s", name, self.template or "")
+   return fmt("PASS: %s()%s",
+              name or "(unknown)",
+              self.msg and (": " .. self.msg) or "")
 end
 
 
@@ -111,9 +113,9 @@ function RFail:tostring_char() return "F" end
 function RFail:add(s, name) s.fail[name] = self end
 function RFail:type() return "fail" end
 function RFail:tostring(name)
-   return fmt("FAIL: %s(): " .. (self.template or "Expected %q, got %q%s"),
-              name, tostring(self.exp or ""),
-              tostring(self.got or ""),
+   return fmt("FAIL: %s(): %s",
+              name or "(unknown)",
+              self.reason or "",
               self.msg and (" - " .. self.msg) or "")
 end
 
@@ -124,7 +126,7 @@ function RSkip:tostring_char() return "s" end
 function RSkip:add(s, name) s.skip[name] = self end
 function RSkip:type() return "skip" end
 function RSkip:tostring(name)
-   return fmt("SKIP: %s()", name)
+   return fmt("SKIP: %s()", name or "(unknown)")
 end
 
 
@@ -135,7 +137,8 @@ function RError:add(s, name) s.err[name] = self end
 function RError:type() return "error" end
 function RError:tostring(name)
    return self.msg or
-      fmt("ERROR (in %s(), couldn't get traceback)", name)
+      fmt("ERROR (in %s(), couldn't get traceback)",
+          name or "(unknown)")
 end
 
 
@@ -158,215 +161,213 @@ local function Error(t) return setmetatable(t, errorMT) end
 old_assert = assert
 local checked = 0
 
-local function wraptest(flag, t)
-   template = template or "Expected %q, got %q%s"
+local function wraptest(flag, msg, t)
    checked = checked + 1
-   if not flag then
-      error(Fail(t))
-   end
+   t.msg = msg
+   if not flag then error(Fail(t)) end
 end
 
-function fail(msg) error(Fail { msg=msg, template="(Failed)" }) end
+function fail(msg) error(Fail { msg=msg, reason="(Failed)" }) end
 function skip(msg) error(Skip { msg=msg }) end
 
 
 ---got == true.
 function assert(got, msg)
-   wraptest(got, { exp=true, got=got, msg=msg,
-                   template="Expected success." })
+   wraptest(got, msg, { reason="Expected success." })
 end
 
 assert_true = assert
 
 ---got == false.
 function assert_false(got, msg)
-   wraptest(not got, { exp="false", got=got, msg=msg,
-                       template="Expected %s, got %s%s" })
+   wraptest(not got, msg,
+            { reason=fmt("Expected %s, got %s",
+                                  tostring(exp), tostring(got)) })
 end
 
 --got == nil
 function assert_nil(got, msg)
-   wraptest(got == nil, { exp="nil", got=got, msg=msg })
+   wraptest(got == nil, msg,
+            { reason=fmt("Expected nil, got %s", tostring(got)) })
 end
 
 --got ~= nil
 function assert_not_nil(got, msg)
-   wraptest(got ~= nil, { exp="nil", got=got, msg=msg })
+   wraptest(got ~= nil, msg, { reason=fmt("Expected non-nil value") })
 end
 
 ---exp == got.
 function assert_equal(exp, got, msg)
-   wraptest(exp == got, { exp=exp, got=got, msg=msg })
+   wraptest(exp == got, msg, { reason="Expected ==" })
 end
 
 ---exp ~= got.
 function assert_not_equal(exp, got, msg)
-   wraptest(exp ~= got, { exp=exp, got=got, msg=msg })
+   wraptest(exp ~= got, msg, { reason="Expected ~=" })
 end
 
 ---val > lim.
 function assert_gt(lim, val, msg)
-   wraptest(val > lim, { exp=lim, got=val, msg=msg })
+   wraptest(val > lim, msg, { reason="Expected >" })
 end
 
 ---val >= lim.
 function assert_gte(lim, val, msg)
-   wraptest(val >= lim, { exp=lim, got=val, msg=msg })
+   wraptest(val >= lim, msg, { reason="Expected >=" })
 end
 
 ---val < lim.
 function assert_lt(lim, val, msg)
-   wraptest(val < lim, { exp=lim, got=val, msg=msg })
+   wraptest(val < lim, msg, { reason="Expected <" })
 end
 
 ---val <= lim.
 function assert_lte(lim, val, msg)
-   wraptest(val <= lim, { exp=lim, got=val, msg=msg })
+   wraptest(val <= lim, msg, { reason="Expected <=" })
 end
 
 ---#val == len.
 function assert_len(len, val, msg)
-   wraptest(#val == len, { exp=lim, got=val, msg=msg })
+   wraptest(#val == len, msg, { reason="Expected ==" })
 end
 
 ---#val ~= len.
 function assert_not_len(len, val, msg)
-   wraptest(#val ~= len, { exp=lim, got=val, msg=msg })
+   wraptest(#val ~= len, msg, { reason="Expected ~=" })
 end
 
 ---Test that the string s matches the pattern exp.
 function assert_match(exp, s, msg)
-   wraptest(exp:match(s), { exp=exp, got=s, msg=msg,
-                              template="Expected pattern to match" })
+   wraptest(type(s) == "string" and s:match(exp), msg,
+            { reason="Expected to match pattern" })
 end
 
 ---Test that the string s doesn't match the pattern exp.
 function assert_not_match(exp, s, msg)
-   wraptest(not exp:match(s),
-            { exp=exp, got=s, msg=msg,
-              template="Expected pattern to not match" })
+   wraptest(type(s) ~= "string" or not exp:match(s), msg,
+            { reason="Should not match pattern" })
 end
 
 ---Test that val is a boolean.
 function assert_boolean(val, msg)
-   wraptest(type(val) == "boolean",
-            { exp="boolean", got=type(val), msg=ms,
-              template="Expected type of %s but got type %s%s" })
+   wraptest(type(val) == "boolean", msg,
+            { reason=fmt("Expected type boolean but got %s",
+                         type(val)) })
 end
 
 ---Test that val is not a boolean.
 function assert_not_boolean(val, msg)
-   wraptest(type(val) ~= "boolean",
-            { exp="boolean", got=type(val), msg=ms,
-              template="Expected type other than %s but got type %s%s" })
+   wraptest(type(val) ~= "boolean", msg,
+            { reason=fmt("Expected type other than boolean but got %s",
+                         type(val)) })
 end
 
 ---Test that val is a number.
 function assert_number(val, msg)
-   wraptest(type(val) == "number",
-            { exp="number", got=type(val), msg=msg,
-              template"Expected type of %s but got type %s%s" })
+   wraptest(type(val) == "number", msg,
+            { reason=fmt("Expected type number but got %s",
+                         type(val)) })
 end
 
 ---Test that val is not a number.
 function assert_not_number(val, msg)
-   wraptest(type(val) ~= "number",
-            { exp="number", got=type(val), msg=msg,
-              template"Expected type other than %s but got type %s%s" })
+   wraptest(type(val) ~= "number", msg,
+            { reason=fmt("Expected type other than number but got %s",
+                         type(val)) })
 end
 
 ---Test that val is a string.
 function assert_string(val, msg)
-   wraptest(type(val) == "string",
-            { exp="string", got=type(val), msg=msg,
-              template="Expected type of %s but got type %s%s" })
+   wraptest(type(val) == "string", msg,
+            { reason=fmt("Expected type string but got %s",
+                         type(val)) })
 end
 
 ---Test that val is not a string.
 function assert_not_string(val, msg)
-   wraptest(type(val) ~= "string",
-            { exp="string", got=type(val), msg=msg,
-              template="Expected type other than %s but got type %s%s" })
+   wraptest(type(val) ~= "string", msg,
+            { reason=fmt("Expected type other than string but got %s",
+                         type(val)) })
 end
 
 ---Test that val is a table.
 function assert_table(val, msg)
-   wraptest(type(val) == "table",
-            { exp="table", got=type(val), msg=msg,
-              template="Expected type of %s but got type %s%s" })
+   wraptest(type(val) == "table", msg,
+            { reason=fmt("Expected type table but got %s",
+                         type(val)) })
 end
 
 ---Test that val is not a table.
 function assert_not_table(val, msg)
-   wraptest(type(val) ~= "table",
-            { exp="table", got=type(val), msg=msg,
-              template="Expected type other than %s but got type %s%s" })
+   wraptest(type(val) ~= "table", msg,
+            { reason=fmt("Expected type other than table but got %s",
+                         type(val)) })
 end
 
 ---Test that val is a function.
 function assert_function(val, msg)
-   wraptest(type(val) == "function",
-            { exp="function", got=type(val), msg=msg,
-              template="Expected type of %s but got type %s%s" })
+   wraptest(type(val) == "function", msg,
+            { reason=fmt("Expected type function but got %s",
+                         type(val)) })
 end
 
 ---Test that val is not a function.
 function assert_function(val, msg)
-   wraptest(type(val) ~= "function",
-            { exp="function", got=type(val), msg=msg,
-              template="Expected type other than %s but got type %s%s" })
+   wraptest(type(val) ~= "function", msg,
+            { reason=fmt("Expected type other than function but got %s",
+                         type(val)) })
 end
 
 ---Test that val is a thread (coroutine).
 function assert_thread(val, msg)
-   wraptest(type(val) == "thread",
-            { exp="thread", got=type(val), msg=msg,
-              template="Expected type of %s but got type %s%s" })
+   wraptest(type(val) == "thread", msg,
+            { reason=fmt("Expected type thread but got %s",
+                         type(val)) })
 end
 
 ---Test that val is not a thread (coroutine).
 function assert_not_thread(val, msg)
-   wraptest(type(val) ~= "thread",
-            { exp="thread", got=type(val), msg=msg,
-              template="Expected type other than %s but got type %s%s" })
+   wraptest(type(val) ~= "thread", msg,
+            { reason=fmt("Expected type other than thread but got %s",
+                         type(val)) })
 end
 
 ---Test that val is a userdata (light or heavy).
 function assert_userdata(val, msg)
-   wraptest(type(val) == "userdata",
-            { exp="userdata", got=type(val), msg=msg,
-              template="Expected type of %s but got type %s%s" })
+   wraptest(type(val) == "userdata", msg,
+            { reason=fmt("Expected type userdata but got %s",
+                         type(val)) })
 end
 
 ---Test that val is not a userdata (light or heavy).
 function assert_not_userdata(val, msg)
-   wraptest(type(val) ~= "userdata",
-            { exp="userdata", got=type(val), msg=msg,
-              template="Expected type other than %s but got type %s%s" })
+   wraptest(type(val) ~= "userdata", msg,
+            { reason=fmt("Expected type other than userdata but got %s",
+                         type(val)) })
 end
 
 ---Test that a value has the expected metatable.
 function assert_metatable(exp, val, msg)
    local mt = getmetatable(val)
-   wraptest(mt == exp,
-            { exp=exp, got=mt, msg=msg,
-              template="Expected metatable %s but got %s%s" })
+   wraptest(mt == exp, msg,
+            { reason=fmt("Expected metatable %s but got %s",
+                         tostring(exp), tostring(mt)) })
 end
 
 ---Test that a value does not have a given metatable.
 function assert_not_metatable(exp, val, msg)
    local mt = getmetatable(val)
-   wraptest(mt ~= exp,
-            { exp=exp, got=mt, msg=msg,
-              template="Expected metatable other than %s but got %s%s" })
+   wraptest(mt ~= exp, msg,
+            { reason=fmt("Expected metatable other than %s",
+                         tostring(exp)) })
 end
 
 ---Test that the function raises an error when called.
 function assert_error(f, msg)
    local ok, err = pcall(f)
-   wraptest(not ok,
-            { exp="an error", got=ok or err, msg=msg,
-              template="Expected an error" })
+   wraptest(not ok, msg,
+            { exp="an error", got=ok or err,
+              reason="Expected an error" })
 end
 
 
@@ -489,6 +490,7 @@ local function get_tests(mod)
          ts[k] = v
       end
    end
+   ts.setup, ts.teardown = mod.setup, mod.teardown
    return ts
 end
 
@@ -526,12 +528,12 @@ local function err_handler(name)
 end
 
 
-local function run_test(name, test, suite, hooks)
+local function run_test(name, test, suite, hooks, setup, teardown)
    local result
    if is_func(hooks.pre_test) then hooks.pre_test(name) end
    local t_pre, t_post          --timestamps. requires luasocket.
    if now then t_pre = now() end
-   if is_func(suite.setup) then suite.setup(name) end
+   if is_func(setup) then setup(name) end
    
    local ok, err = xpcall(test, err_handler(name))
    if ok then err = Pass() end
@@ -540,7 +542,7 @@ local function run_test(name, test, suite, hooks)
    -- TODO: log tests w/ no assertions?
    result:add(suite, name)
 
-   if is_func(suite.teardown) then suite.teardown(name) end
+   if is_func(teardown) then teardown(name) end
    if now then t_post = now() end
    if t_pre and t_post then result.elapsed = t_post - t_pre end
    if is_func(hooks.post_test) then hooks.post_test(name, result) end
@@ -553,6 +555,7 @@ end
 function run(hooks, just)
    -- also check the namespace it's run in
    hooks = hooks or {}
+   if hooks == true then hooks = verbose_hooks end
    setmetatable(hooks, {__index = default_hooks})
 
    local results = result_table("main")
@@ -563,13 +566,15 @@ function run(hooks, just)
    if hooks.begin then hooks.begin(results, suites) end
 
    for sname,tests in pairs(suites) do
+      local setup, teardown = tests.setup, tests.teardown
+      tests.setup, tests.teardown = nil, nil
       local t_ct = count(tests)
       if t_ct > 0 then
          local suite = result_table(sname)
          if hooks.begin_suite then hooks.begin_suite(suite, tests) end
          suite.tests = suite
          for name, test in pairs(tests) do
-            run_test(name, test, suite, hooks)
+            run_test(name, test, suite, hooks, setup, teardown)
          end
          if hooks.end_suite then hooks.end_suite(suite) end
          combine_results(results, suite)
@@ -825,7 +830,7 @@ local function run_randtest(seed, f, args, r, limit)
       try_ct = try_ct + 1
    end
    if try_ct >= 50 then
-      error(Fail { template = "Exhausted all seeds" })
+      error(Fail { reason = "Exhausted all seeds" })
    end
    set_seed(seed)
    r.tried[seed] = true
@@ -886,20 +891,20 @@ local function assert_random(opt, f, ...)
    
    if #r.es > 0 then
       local seeds = get_seeds(r.es)
-      error(Fail { template = fmt("%d tests, %d error(s).\n   %s",
+      error(Fail { reason = fmt("%d tests, %d error(s).\n   %s",
                                   r.ts, #r.es,
                                   table.concat(seeds, "\n   ")),
                    seeds = seeds})
    elseif #r.fs > 0 then
       local seeds = get_seeds(r.fs)
-      error(Fail { template = fmt("%d tests, %d failure(s).\n   %s",
+      error(Fail { reason = fmt("%d tests, %d failure(s).\n   %s",
                                   r.ts, #r.fs,
                                   table.concat(seeds, "\n   ")),
                    seeds = seeds})
    elseif #r.ss >= opt.max_skips then
-      error(Fail { template = fmt("Too many cases skipped.")})
+      error(Fail { reason = fmt("Too many cases skipped.")})
    else
-      error(Pass { template = fmt(": %d cases passed.", #r.ps) })
+      error(Pass { reason = fmt(": %d cases passed.", #r.ps) })
    end
 end
 
