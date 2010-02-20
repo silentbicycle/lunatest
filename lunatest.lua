@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------
 --
--- Copyright (c) 2009 Scott Vokes <scott@silentbicycle.com>
+-- Copyright (c) 2009 Scott Vokes <vokes.s@gmail.com>
 --
 -- Permission is hereby granted, free of charge, to any person
 -- obtaining a copy of this software and associated documentation
@@ -756,18 +756,23 @@ end
 
 -- Process test case args.
 local function proc_args(arglist)
-   local name, pred, args
+   local name, pred, args, always
    if type(arglist[1]) == "string" then
       name = arglist[1]
       table.remove(arglist, 1)
    else name = "" end
+
+   if type(arglist[1]) == "table" then
+      always = arglist[1]
+      table.remove(arglist, 1)
+   else always = {} end
 
    local pred = arglist[1]
    assert(type(pred) == "function",
           "First argument (after optional name) must be trial function.")
    table.remove(arglist, 1)
 
-   return name, pred, arglist
+   return name, pred, always, arglist
 end
 
 
@@ -877,6 +882,7 @@ local function assert_random(opt, f, ...)
       end
       if opt.show_progress and i % opt.tick == 0 then iow(".") end
    end
+   local overall_status = (passed == count and "PASS" or "FAIL")
    
    if #r.es > 0 then
       local seeds = get_seeds(r.es)
