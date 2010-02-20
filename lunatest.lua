@@ -431,7 +431,10 @@ default_hooks = {
                  end,
    end_suite = false,
    pre_test = false,
-   post_test = function(name, res) iow(res:tostring_char()) end,
+   post_test = function(name, res)
+                  iow(res:tostring_char())
+                  io.stdout:flush()
+               end,
    done = function(r)
              print_totals(r)
              for _,ts in ipairs{ r.fail, r.err } do
@@ -531,20 +534,24 @@ end
 local function run_test(name, test, suite, hooks, setup, teardown)
    local result
    if is_func(hooks.pre_test) then hooks.pre_test(name) end
-   local t_pre, t_post          --timestamps. requires luasocket.
+   local t_pre, t_post, elapsed      --timestamps. requires luasocket.
    if now then t_pre = now() end
-   if is_func(setup) then setup(name) end
    
-   local ok, err = xpcall(test, err_handler(name))
+   local ok, err = xpcall(
+      function()
+         if is_func(setup) then setup(name) end
+         test()
+         if now then t_post = now() end
+         if t_pre and t_post then elapsed = t_post - t_pre end
+         if is_func(teardown) then teardown(name, elapsed) end
+      end, err_handler(name))
+
    if ok then err = Pass() end
    result = err
 
    -- TODO: log tests w/ no assertions?
    result:add(suite, name)
 
-   if is_func(teardown) then teardown(name) end
-   if now then t_post = now() end
-   if t_pre and t_post then result.elapsed = t_post - t_pre end
    if is_func(hooks.post_test) then hooks.post_test(name, result) end
 end
 
@@ -885,7 +892,10 @@ local function assert_random(opt, f, ...)
          #r.fs > opt.max_failures or
          #r.es > opt.max_errors then break
       end
-      if opt.show_progress and i % opt.tick == 0 then iow(".") end
+      if opt.show_progress and i % opt.tick == 0 then
+         iow(".")
+         io.stdout:flush()
+      end
    end
    local overall_status = (passed == count and "PASS" or "FAIL")
    
