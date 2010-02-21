@@ -43,6 +43,7 @@ local assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber =
    assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber
 local fmt, tostring, type, unpack = string.format, tostring, type, unpack
 local getmetatable, setmetatable, xpcall = getmetatable, setmetatable, xpcall
+local require = require
 
 -- Get containing env, Lua 5.1 and 5.2-compatible.
 local getenv = getfenv or debug.getfenv
@@ -60,6 +61,12 @@ local now = socket and socket.gettime
 -- Get env immediately wrapping module, to put assert_ tests there.
 local _importing_env = getenv()
 local dump = my.dump
+
+-- Check command line arguments:
+-- -v / --verbose, default to verbose_hooks.
+-- -s or --suite, only run the named suite(s).
+-- -t or --test, only run tests matching the pattern.
+local lt_arg = arg
 
 
 -- #####################
@@ -95,14 +102,23 @@ end
 -- # Results #
 -- ###########
 
+local function msec(t)
+   if t and type(t) == "number" then 
+      return fmt(" (%.2fms)", t * 1000)
+   else
+      return ""
+   end
+end
+
+
 local RPass = {}
 local passMT = {__index=RPass}
 function RPass:tostring_char() return "." end
 function RPass:add(s, name) s.pass[name] = self end
 function RPass:type() return "pass" end
 function RPass:tostring(name)
-   return fmt("PASS: %s()%s",
-              name or "(unknown)",
+   return fmt("PASS: %s%s%s",
+              name or "(unknown)", msec(self.elapsed),
               self.msg and (": " .. self.msg) or "")
 end
 
@@ -113,9 +129,9 @@ function RFail:tostring_char() return "F" end
 function RFail:add(s, name) s.fail[name] = self end
 function RFail:type() return "fail" end
 function RFail:tostring(name)
-   return fmt("FAIL: %s(): %s",
+   return fmt("FAIL: %s%s: %s",
               name or "(unknown)",
-              self.reason or "",
+              self.reason or "", msec(self.elapsed),
               self.msg and (" - " .. self.msg) or "")
 end
 
@@ -137,8 +153,8 @@ function RError:add(s, name) s.err[name] = self end
 function RError:type() return "error" end
 function RError:tostring(name)
    return self.msg or
-      fmt("ERROR (in %s(), couldn't get traceback)",
-          name or "(unknown)")
+      fmt("ERROR (in %s%s, couldn't get traceback)",
+          msec(self.elapsed), name or "(unknown)")
 end
 
 
@@ -160,6 +176,7 @@ local function Error(t) return setmetatable(t, errorMT) end
 ---Renamed standard assert.
 old_assert = assert
 local checked = 0
+local TS = tostring
 
 local function wraptest(flag, msg, t)
    checked = checked + 1
@@ -182,13 +199,13 @@ assert_true = assert
 function assert_false(got, msg)
    wraptest(not got, msg,
             { reason=fmt("Expected %s, got %s",
-                                  tostring(exp), tostring(got)) })
+                         TS(exp), TS(got)) })
 end
 
 --got == nil
 function assert_nil(got, msg)
    wraptest(got == nil, msg,
-            { reason=fmt("Expected nil, got %s", tostring(got)) })
+            { reason=fmt("Expected nil, got %s", TS(got)) })
 end
 
 --got ~= nil
@@ -198,54 +215,71 @@ end
 
 ---exp == got.
 function assert_equal(exp, got, msg)
-   wraptest(exp == got, msg, { reason="Expected ==" })
+   wraptest(exp == got, msg,
+            { reason=fmt("Expected %q, got %q",
+                         TS(exp), TS(got)) })
 end
 
 ---exp ~= got.
 function assert_not_equal(exp, got, msg)
-   wraptest(exp ~= got, msg, { reason="Expected ~=" })
+   wraptest(exp ~= got, msg,
+            { reason="Expected something other than " .. TS(exp) })
 end
 
 ---val > lim.
 function assert_gt(lim, val, msg)
-   wraptest(val > lim, msg, { reason="Expected >" })
+   wraptest(val > lim, msg,
+            { reason=fmt("Expected a value > %s, got %s",
+                         TS(lim), TS(val)) })
 end
 
 ---val >= lim.
 function assert_gte(lim, val, msg)
-   wraptest(val >= lim, msg, { reason="Expected >=" })
+   wraptest(val >= lim, msg,
+            { reason=fmt("Expected a value >= %s, got %s",
+                         TS(lim), TS(val)) })
 end
 
 ---val < lim.
 function assert_lt(lim, val, msg)
-   wraptest(val < lim, msg, { reason="Expected <" })
+   wraptest(val < lim, msg,
+            { reason=fmt("Expected a value < %s, got %s",
+                         TS(lim), TS(val)) })
 end
 
 ---val <= lim.
 function assert_lte(lim, val, msg)
-   wraptest(val <= lim, msg, { reason="Expected <=" })
+   wraptest(val <= lim, msg,
+            { reason=fmt("Expected a value <= %s, got %s",
+                         TS(lim), TS(val)) })
 end
 
 ---#val == len.
 function assert_len(len, val, msg)
-   wraptest(#val == len, msg, { reason="Expected ==" })
+   wraptest(#val == len, msg,
+            { reason=fmt("Expected #val == %d, was %d",
+                         len, #val) })
 end
 
 ---#val ~= len.
 function assert_not_len(len, val, msg)
-   wraptest(#val ~= len, msg, { reason="Expected ~=" })
+   wraptest(#val ~= len, msg,
+            { reason=fmt("Expected length other than %d", len) })
 end
 
 ---Test that the string s matches the pattern exp.
-function assert_match(exp, s, msg)
-   wraptest(type(s) == "string" and s:match(exp), msg,
-            { reason="Expected to match pattern" })
+function assert_match(pat, s, msg)
+   s = tostring(s)
+   wraptest(type(s) == "string" and s:match(pat), msg,
+            { reason=fmt("Expected string to match pattern %s, was %s",
+                         pat,
+                         (s:len() > 30 and (s:sub(1,30) .. "...")or s)) })
 end
 
 ---Test that the string s doesn't match the pattern exp.
-function assert_not_match(exp, s, msg)
-   wraptest(type(s) ~= "string" or not exp:match(s), msg,
-            { reason="Should not match pattern" })
+function assert_not_match(pat, s, msg)
+   wraptest(type(s) ~= "string" or not s:match(pat), msg,
+            { reason=fmt("Should not match pattern %s", pat) })
 end
 
 ---Test that val is a boolean.
@@ -351,7 +385,7 @@ function assert_metatable(exp, val, msg)
    local mt = getmetatable(val)
    wraptest(mt == exp, msg,
             { reason=fmt("Expected metatable %s but got %s",
-                         tostring(exp), tostring(mt)) })
+                         TS(exp), TS(mt)) })
 end
 
 ---Test that a value does not have a given metatable.
@@ -359,7 +393,7 @@ function assert_not_metatable(exp, val, msg)
    local mt = getmetatable(val)
    wraptest(mt ~= exp, msg,
             { reason=fmt("Expected metatable other than %s",
-                         tostring(exp)) })
+                         TS(exp)) })
 end
 
 ---Test that the function raises an error when called.
@@ -426,7 +460,7 @@ end
 default_hooks = {
    begin = false,
    begin_suite = function(s_env, tests)
-                    iow(fmt("-- Starting suite %q, %d test(s)\n  ",
+                    iow(fmt("\n-- Starting suite %q, %d test(s)\n  ",
                             s_env.name, count(tests)))
                  end,
    end_suite = false,
@@ -442,7 +476,7 @@ default_hooks = {
                    print(res:tostring(name))
                 end
              end
-          end
+          end,
 }
 
 
@@ -462,7 +496,7 @@ verbose_hooks = {
       function(s_env)
          local ps, fs = count(s_env.pass), count(s_env.fail)
          local ss, es = count(s_env.skip), count(s_env.err)
-         printf("  * Finished suite %q, +%d -%d E%d s%d",
+         printf("    Finished suite %q, +%d -%d E%d s%d",
                 s_env.name, ps, fs, es, ss)
       end,
    pre_test = false,
@@ -506,11 +540,12 @@ end
 function suite(modname)
    local ok, err = pcall(
       function()
-         local mod = require(modname)
-         suites[modname] = get_tests(s)
+         local mod, r_err = require(modname)
+         suites[modname] = get_tests(mod)
       end)
    if not ok then
-      print("Error loading test suite: " .. modname)
+      print(fmt(" * Error loading test suite %q:\n%s",
+                modname, tostring(err)))
    end
 end
 
@@ -548,6 +583,7 @@ local function run_test(name, test, suite, hooks, setup, teardown)
 
    if ok then err = Pass() end
    result = err
+   if elapsed then result.elapsed = elapsed end
 
    -- TODO: log tests w/ no assertions?
    result:add(suite, name)
@@ -556,35 +592,61 @@ local function run_test(name, test, suite, hooks, setup, teardown)
 end
 
 
+local function cmd_line_switches(arg)
+   local opts = {}
+   for i=1,#arg do
+      local v = arg[i]
+      if v == "-v" or v == "--verbose" then opts.verbose=true
+      elseif v == "-s" or v == "--suite" then
+         opts.suite_pat = arg[i+1]
+      elseif v == "-t" or v == "--test" then
+         opts.test_pat = arg[i+1]
+      end
+   end
+   return opts
+end
+
+
 ---Run all known test suites, with given configuration hooks.
 -- @param hooks Override the default hooks.
 -- @param just Only run a specific suite. TODO
+-- @usage If no hooks are provided and arg[1] == "-v", the
+-- verbose_hooks will be used.
 function run(hooks, just)
    -- also check the namespace it's run in
-   hooks = hooks or {}
-   if hooks == true then hooks = verbose_hooks end
+   local opts = cmd_line_switches(lt_arg)
+   if hooks == true or (hooks == nil and opts.verbose) then
+      hooks = verbose_hooks
+   else
+      hooks = hooks or {}
+   end
+
    setmetatable(hooks, {__index = default_hooks})
 
    local results = result_table("main")
 
+   -- If it's just one test file, check its environment, too.
    local env = getenv(3)
    if env then suites.main = get_tests(env) end
 
    if hooks.begin then hooks.begin(results, suites) end
 
    for sname,tests in pairs(suites) do
-      local setup, teardown = tests.setup, tests.teardown
-      tests.setup, tests.teardown = nil, nil
-      local t_ct = count(tests)
-      if t_ct > 0 then
-         local suite = result_table(sname)
-         if hooks.begin_suite then hooks.begin_suite(suite, tests) end
-         suite.tests = suite
-         for name, test in pairs(tests) do
-            run_test(name, test, suite, hooks, setup, teardown)
+      if not opts.suite_pat or sname:match(opts.suite_pat) then
+         local setup, teardown = tests.setup, tests.teardown
+         tests.setup, tests.teardown = nil, nil
+         if count(tests) > 0 then
+            local suite = result_table(sname)
+            if hooks.begin_suite then hooks.begin_suite(suite, tests) end
+            suite.tests = suite
+            for name, test in pairs(tests) do
+               if not opts.test_pat or name:match(opts.test_pat) then
+                  run_test(name, test, suite, hooks, setup, teardown)
+               end
+            end
+            if hooks.end_suite then hooks.end_suite(suite) end
+            combine_results(results, suite)
          end
-         if hooks.end_suite then hooks.end_suite(suite) end
-         combine_results(results, suite)
       end
    end
    if hooks.done then hooks.done(results) end
