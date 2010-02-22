@@ -1,4 +1,4 @@
-------------------------------------------------------------------------
+-----------------------------------------------------------------------
 --
 -- Copyright (c) 2009 Scott Vokes <vokes.s@gmail.com>
 --
@@ -43,7 +43,7 @@ local assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber =
    assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber
 local fmt, tostring, type, unpack = string.format, tostring, type, unpack
 local getmetatable, setmetatable, xpcall = getmetatable, setmetatable, xpcall
-local require = require
+local exit, next, require = os.exit, next, require
 
 -- Get containing env, Lua 5.1 and 5.2-compatible.
 local getenv = getfenv or debug.getfenv
@@ -60,14 +60,12 @@ local now = socket and socket.gettime
 
 -- Get env immediately wrapping module, to put assert_ tests there.
 local _importing_env = getenv()
-local dump = my.dump
 
 -- Check command line arguments:
 -- -v / --verbose, default to verbose_hooks.
 -- -s or --suite, only run the named suite(s).
 -- -t or --test, only run tests matching the pattern.
 local lt_arg = arg
-
 
 -- #####################
 -- # Utility functions #
@@ -129,9 +127,9 @@ function RFail:tostring_char() return "F" end
 function RFail:add(s, name) s.fail[name] = self end
 function RFail:type() return "fail" end
 function RFail:tostring(name)
-   return fmt("FAIL: %s%s: %s",
+   return fmt("FAIL: %s%s: %s%s",
               name or "(unknown)",
-              self.reason or "", msec(self.elapsed),
+              msec(self.elapsed), self.reason or "",
               self.msg and (" - " .. self.msg) or "")
 end
 
@@ -142,7 +140,8 @@ function RSkip:tostring_char() return "s" end
 function RSkip:add(s, name) s.skip[name] = self end
 function RSkip:type() return "skip" end
 function RSkip:tostring(name)
-   return fmt("SKIP: %s()", name or "(unknown)")
+   return fmt("SKIP: %s()%s", name or "unknown",
+              self.msg and (" - " .. self.msg) or "")
 end
 
 
@@ -158,11 +157,6 @@ function RError:tostring(name)
 end
 
 
-local function genRes(mt, t)
-   return setmetatable(t, mt)
-end 
-
-
 local function Pass(t) return setmetatable(t or {}, passMT) end
 local function Fail(t) return setmetatable(t, failMT) end
 local function Skip(t) return setmetatable(t, skipMT) end
@@ -174,7 +168,6 @@ local function Error(t) return setmetatable(t, errorMT) end
 -- ##############
 
 ---Renamed standard assert.
-old_assert = assert
 local checked = 0
 local TS = tostring
 
@@ -184,16 +177,24 @@ local function wraptest(flag, msg, t)
    if not flag then error(Fail(t)) end
 end
 
-function fail(msg) error(Fail { msg=msg, reason="(Failed)" }) end
+---Fail a test.
+-- @param no_exit Unless set to true, the presence of any failures
+-- causes the test suite to terminate with an exit status of 1.
+function fail(msg, no_exit)
+   error(Fail { msg=msg, reason="(Failed)", no_exit=no_exit })
+end
+
+
+---Skip a test, with a note, e.g. "TODO".
 function skip(msg) error(Skip { msg=msg }) end
 
 
 ---got == true.
-function assert(got, msg)
+-- (Named "assert_true" to not conflict with standard assert.)
+-- @param msg Message to display with the result.
+function assert_true(got, msg)
    wraptest(got, msg, { reason="Expected success." })
 end
-
-assert_true = assert
 
 ---got == false.
 function assert_false(got, msg)
@@ -346,7 +347,7 @@ function assert_function(val, msg)
 end
 
 ---Test that val is not a function.
-function assert_function(val, msg)
+function assert_not_function(val, msg)
    wraptest(type(val) ~= "function", msg,
             { reason=fmt("Expected type other than function but got %s",
                          type(val)) })
@@ -443,13 +444,28 @@ module("lunatest")
 -- # Hooks #
 -- #########
 
+local dot_ct = 0
+local cols = 70
+
 local iow = io.write
+
+-- Print a char ([.fEs], etc.), wrapping at 70 columns.
+local function dot(c)
+   c = c or "."
+   io.write(c)
+   dot_ct = dot_ct + 1
+   if dot_ct > cols then
+      io.write("\n  ")
+      dot_ct = 0
+   end
+   io.stdout:flush()
+end
 
 local function print_totals(r)
    local ps, fs = count(r.pass), count(r.fail)
    local ss, es = count(r.skip), count(r.err)
-   local buf = {"\n---------- Tests finished, ",
-                "with %d check(s) ----------\n",
+   local buf = {"\n---------- Testing finished, ",
+                "with %d assertion(s) ----------\n",
                 "  %d passed, %d failed, ",
                 "%d error(s), %d skipped."}
    printf(table.concat(buf), checked, ps, fs, es, ss)
@@ -466,12 +482,11 @@ default_hooks = {
    end_suite = false,
    pre_test = false,
    post_test = function(name, res)
-                  iow(res:tostring_char())
-                  io.stdout:flush()
+                  dot(res:tostring_char())
                end,
    done = function(r)
              print_totals(r)
-             for _,ts in ipairs{ r.fail, r.err } do
+             for _,ts in ipairs{ r.fail, r.err, r.skip } do
                 for name,res in pairs(ts) do
                    print(res:tostring(name))
                 end
@@ -489,6 +504,7 @@ verbose_hooks = {
               end
            end,
    begin_suite = function(s_env, tests)
+                    dot_ct = 0
                     printf("-- Starting suite %q, %d test(s)",
                            s_env.name, count(tests))
                  end,
@@ -496,12 +512,14 @@ verbose_hooks = {
       function(s_env)
          local ps, fs = count(s_env.pass), count(s_env.fail)
          local ss, es = count(s_env.skip), count(s_env.err)
+         dot_ct = 0
          printf("    Finished suite %q, +%d -%d E%d s%d",
                 s_env.name, ps, fs, es, ss)
       end,
    pre_test = false,
    post_test = function(name, res)
                   printf(res:tostring(name))
+                  dot_ct = 0
                end,
    done = function(r) print_totals(r) end
 }
@@ -607,6 +625,14 @@ local function cmd_line_switches(arg)
 end
 
 
+local function failures_or_errors(r)
+   if next(r.err) then return true end
+   for k,f in pairs(r.fail) do
+      if not f.no_exit then return true end
+   end
+end
+
+
 ---Run all known test suites, with given configuration hooks.
 -- @param hooks Override the default hooks.
 -- @param just Only run a specific suite. TODO
@@ -625,7 +651,7 @@ function run(hooks, just)
 
    local results = result_table("main")
 
-   -- If it's just one test file, check its environment, too.
+   -- If it's all in one test file, check its environment, too.
    local env = getenv(3)
    if env then suites.main = get_tests(env) end
 
@@ -650,7 +676,8 @@ function run(hooks, just)
       end
    end
    if hooks.done then hooks.done(results) end
-   return results
+
+   if failures_or_errors(results) then os.exit(1) end
 end
 
 
@@ -668,6 +695,7 @@ function set_seed(s) _r:seed(s) end
 
 ---Get a random value low <= x <= high.
 function random_int(low, high)
+   if not high then high = low; low = 0 end
    return _r:value(low, high)
 end
 
@@ -676,17 +704,20 @@ function random_bool() return random_int(0, 1) == 1 end
 
 ---Get a random float low <= x < high.
 function random_float(low, high)
-   return get_int(low, high) + _r:value()
+   return random_int(low, high - 1) + _r:value()
 end
 
 
 if not random then
    set_seed = math.randomseed
    random_bool = function() return math.random(0, 1) == 1 end
-   random_int = function(l, h) return math.random(l, h) end
    random_float = function(l, h)
                      return random_int(l, h - 1) + math.random()
                   end
+   random_int = function(l, h)
+                   if not h then h = l; l = 0 end
+                   return math.random(l, h)
+                end
 end
 
 -- Lua_number's bits of precision. IEEE 754 doubles have 52.
@@ -702,6 +733,21 @@ local bits_of_accuracy = determine_accuracy()
 -- ##################
 -- # Random strings #
 -- ##################
+
+
+-- For valid char classes, see Lua Reference Manual 5.1, p. 77
+-- or http://www.lua.org/manual/5.1/manual.html#5.4.1 .
+local function charclass(pat)
+   local m = {}
+
+   local match, char = string.match, string.char
+   for i=0,255 do
+      local c = char(i)
+      if match(c, pat) then m[#m+1] = c end
+   end
+
+   return table.concat(m)
+end
 
 
 -- Return a (() -> random char) iterator from a pattern.
@@ -746,7 +792,7 @@ local function parse_pattern(pattern)
    assert(len > 0, "Empty charset")
 
    return function()
-             local idx = random_int(0, len) + 1
+             local idx = random_int(1, len)
              return string.sub(cs, idx, idx)
           end
 end
@@ -774,14 +820,16 @@ function random_string(spec)
    local ct, diff
    diff = info.high - info.low
    if diff == 0 then ct = info.low else
-      ct = random_int(diff + 2) + info.low
+      ct = random_int(diff) + info.low
    end
    
    local acc = {}
    for i=1,ct do
       acc[i] = info.gen(self)
    end
-   return table.concat(acc)
+   local res = table.concat(acc)
+   assert(res:len() == ct, "Bad string gen")
+   return res
 end
 
 
@@ -802,7 +850,7 @@ local function gen_number(arg)
    if signed then
       return f(arg, -arg)
    else
-      return f(arg)
+      return f(0, arg)
    end
 end
 
@@ -828,28 +876,6 @@ local function generate_arbitrary(arg)
 end
 
 
--- Process test case args.
-local function proc_args(arglist)
-   local name, pred, args, always
-   if type(arglist[1]) == "string" then
-      name = arglist[1]
-      table.remove(arglist, 1)
-   else name = "" end
-
-   if type(arglist[1]) == "table" then
-      always = arglist[1]
-      table.remove(arglist, 1)
-   else always = {} end
-
-   local pred = arglist[1]
-   assert(type(pred) == "function",
-          "First argument (after optional name) must be trial function.")
-   table.remove(arglist, 1)
-
-   return name, pred, always, arglist
-end
-
-
 local random_test_defaults = {
    count = 100,
    max_failures = 10,
@@ -859,13 +885,8 @@ local random_test_defaults = {
    seed_limit = math.min(1e13, 2^bits_of_accuracy),
    always = {},
    seed = nil,
-   show_progress = false,
-   tick = 10,
+   show_progress = true
 }
-
-local function seed_digits(t)
-   return math.floor(math.log(t.seed_limit) / math.log(10)) + 1
-end
 
 
 local function random_args(args)
@@ -883,10 +904,15 @@ local function new_seed(limit)
 end
 
 
-local function get_seeds(t)
+local function get_seeds_and_args(t)
    local ss = {}
    for _,r in ipairs(t) do
       if r.seed then ss[#ss+1] = r.seed end
+      if r.args then
+         for i,arg in ipairs(r.args) do
+            ss[#ss+1] = "  * " .. arg
+         end
+      end
    end
    return ss
 end
@@ -903,26 +929,36 @@ local function run_randtest(seed, f, args, r, limit)
    end
    set_seed(seed)
    r.tried[seed] = true
+
+   local result
    local r_args = random_args(args)
    local ok, err = pcall(function() f(unpack(r_args)) end)
    if ok then
-      err = Pass()
-      err.seed = seed
-      r.ps[#r.ps+1] = err
+      result = Pass()
+      result.seed = seed
+      r.ps[#r.ps+1] = result
    else
+      -- So errors in the suite itself get through...
+      if type(err) == "string" then error(err) end
       result = err
       result.seed = seed
       local rt = result:type()
-      if rt == "pass" then r.ps[#r.ps+1] = err
-      elseif rt == "fail" then r.fs[#r.fs+1] = err
-      elseif rt == "error" then r.es[#r.es+1] = err
-      elseif rt == "skip" then r.ss[#r.ss+1] = err
+      if rt == "pass" then r.ps[#r.ps+1] = result
+      elseif rt == "fail" then r.fs[#r.fs+1] = result
+      elseif rt == "error" then r.es[#r.es+1] = result
+      elseif rt == "skip" then r.ss[#r.ss+1] = result
       else error("unmatched")
       end
    end
    
    seed = new_seed(limit)
    r.ts = r.ts + 1
+   local str_args = {}
+   -- Convert args to strs (for display) and add to result.
+   for i,v in ipairs(r_args) do
+      str_args[i] = tostring(v)
+   end
+   result.args = str_args
    return seed
 end
 
@@ -948,27 +984,30 @@ local function assert_random(opt, f, ...)
       run_randtest(s, f, args, r, opt.seed_limit)
    end
 
+   set_seed(seed)
+   local tick = opt.tick or opt.count / 10
+
    for i=1,opt.count do
       seed = run_randtest(seed, f, args, r, opt.seed_limit)
       if #r.ss > opt.max_skips or
          #r.fs > opt.max_failures or
          #r.es > opt.max_errors then break
       end
-      if opt.show_progress and i % opt.tick == 0 then
-         iow(".")
+      if opt.show_progress and i % tick == 0 then
+         dot(".")
          io.stdout:flush()
       end
    end
    local overall_status = (passed == count and "PASS" or "FAIL")
    
    if #r.es > 0 then
-      local seeds = get_seeds(r.es)
+      local seeds = get_seeds_and_args(r.es)
       error(Fail { reason = fmt("%d tests, %d error(s).\n   %s",
                                   r.ts, #r.es,
                                   table.concat(seeds, "\n   ")),
                    seeds = seeds})
    elseif #r.fs > 0 then
-      local seeds = get_seeds(r.fs)
+      local seeds = get_seeds_and_args(r.fs)
       error(Fail { reason = fmt("%d tests, %d failure(s).\n   %s",
                                   r.ts, #r.fs,
                                   table.concat(seeds, "\n   ")),

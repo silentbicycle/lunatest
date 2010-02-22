@@ -1,160 +1,190 @@
+pcall(require, "luacov")
 require "lunatest"
 
-local function label(l) print("\n----- " .. l ) end
-
--- Initialize verbose tester.
-local t = lunatest.new{ verbose=true, count=10 }
-
-label("Verbose, case name")
-t:test("not_div_by_3", { 3231431921740 }, --always test that seed
-       function(x) return x % 3 ~= 0 end, 37)
-
-label("Verbose, no case name")
-t:test(function(x) return x % 3 ~= 0 end, 37)
+print '=============================='
+print('To test just the random suite, add "-s random" to the command line')
+print('To run just some tests, add "-t [pattern]"')
+print '=============================='
 
 
--- New tester, more cases, reduce verbosity to "only on error".
-t = lunatest.new{ count=10000, verbose="error_only" }
+lunatest.suite("suite-with-random-tests")
 
-label("Only show errors, enough cases that showing progress matters")
-t:test("flipcoin", function(x) return x end, 
-       false)        -- bool -> return random bool
-
-label("Same, no label")
-t:test(function(x) return x end, 
-       true)
-
-
--- Show progress, show arguments on error and failure (default).
--- Seeds can be made arbitrarily small; if all possible seeds have 
--- been used, it will terminate the test and print the results.
-t = lunatest.new{ count=1000 }
-
--- String patterns
-label("Test with string pattern")
-t:test("has_vowels", 
-       function(s) return string.match(s, "[aeiou]") end,
-       "50 %l")        -- generate 50 random lowercase letters
-t:test("has_an_x", { 9617133740369 }, -- seed to always test
-       function(s) return string.match(s, "x") end,
-       "100,150 %l")       -- ususally passes, but not always...
-t:test("has_no_Xs", 
-       function(s) return not string.match(s, "X") end,
-       "500 %l")       --lowercase only, won't find "X"s
-
-label("(Error on 'xx', skip on '  '.)")
-t:test("show_error", 
-       -- Some seeds that raise errors
-       { 5961887444430, 4213055815991, 6406636384987, 514064420559, 
-         4093722260999, 3520618634168, 657564407699 },
-       function(s) 
-          if string.match(s, "  ") then 
-             error("skip")      -- discard this run and retry
-          elseif string.match(s, "xx") then
-             error("(a very fake crash)")
-          end
-          return string.match(s, ".") 
-       end,
-       "4,6 %l ")
-
-
--- Ints and floats
-t = lunatest.new{ count=1000, verbose="error_only" }
-
-label("Int / float tests")
-t:test("is_pos", function(n) return n >= 0 end, 100)
-t:test("is_pos2", function(n) return (n - 1) >= 0 end, 100)
-t:test("rounds_down", 
-       function(n) return math.fmod(n, 1) < .2 end, 
-       -10.1)          -- return a signed float -10 <= x < 10
-
-
--- Finally, with an actual generator function
-label("From a function")
-t:test("table_length", function(t) return #t < 6 end,
-       function(r)
-          local t = {}
-          -- For every "heads", add another val
-          while r:get_bool() do t[#t+1] = "(v)" end
-          return t
-       end)
-
-
-label("Same, with metatable")
-local flipMT = { __random= function(r)
-                              local t = {}
-                              while r:get_bool() do t[#t+1] = "(v)" end
-                              return t
-                           end }
-local fliptable = setmetatable( {}, { __index = flipMT })
-t:test("table_length2", function(t) return #t < 6 end, fliptable)
-
-
-------------------------------------------------------------------------
-label "Now, let's test the actual program..."
-------------------------------------------------------------------------
-label("Test that the RNG wrapper matches expected bounds")
-t = lunatest.new{ count=1000 }
-
-local low, high
-for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1}, 
-                         {-100, 100}, {-1, 0}, {0, 1} } do
-   low, high = pair[1], pair[2]
-   if high > 1 then             -- can't generate randints 0 <= x < 1
-      t:test("int_genL_" .. run,
-             function(i) return i < high end,
-             function(r) return r:get_int(high) end)
-   end   
-   t:test("int_genLH_" .. run, function(i) 
-                                      return i < high and i >= low 
-                                   end,
-          function(r) return r:get_int(low, high) end)
-   
-   if high > 1 then
-      t:test("float_genL_" .. run, function(t) return t < high end, 
-             function(r) return r:get_float(high) end)
-   end
-   
-   t:test("float_genLH_" .. run, function(t) return 
-                                        t < high and t >= low 
-                                     end, 
-          function(r) return r:get_float(low, high) end)
+function test_fail()
+   -- the true here is so the test run as a whole still succeeds.
+   fail("This one *should* fail.", true)
 end
 
-label("Test string lengths are generated correctly")
-for run,high in ipairs{ 11, 12, 13 } do
-   t:test("strlenL_" .. high, 
-          function(s) return string.len(s) >= 10 end,
-          "10," .. high .. " %l")
+function test_assert()
+   assert_true(true)
+end
 
-   local used = {}  -- also test overall generation
+function test_skip()
+   skip("(reason why this test was skipped)")
+end
 
-   t:test("strlenLH_" .. high,
-          function(s) 
-             local len = string.len(s)
-             used[len] = true
-             return len >= 10 and len <= high
-          end,
-          "10," .. high .. " %l")
+function test_assert_false()
+   assert_false(false)
+end
 
-   for i=10,high do 
-      if not used[i] then 
-         print("Never made any strings of length " .. i)
-      end
-   end
+function test_assert_nil()
+   assert_nil(nil)
 end
 
 
-label("Testing get_choice() (about 2/3 should fail).")
-t = lunatest.new{ count=10000, verbose="error_only" }
-local chosen = {}
-t:test("pick_door",
-    function(d)
-       chosen[d] = true
-       return d == "doorC"    -- A and B have goats...
-    end,
-    function(r) return r:get_choice{"doorA", "doorB", "doorC"} end)
-
-if not (chosen.doorA and chosen.doorB and chosen.doorC) then
-    print("ERROR -- didn't pick all doors")
+function test_assert_not_nil()
+   assert_not_nil("foo")
 end
+
+function test_assert_equal()
+   assert_equal(4, 4)
+end
+
+function test_assert_not_equal()
+   assert_not_equal("perl", "quality")
+end
+
+function test_assert_gt()
+   assert_gt(8, 400)
+end
+
+function test_assert_gte()
+   assert_gte(8, 400)
+   assert_gte(8, 8)
+end
+
+function test_assert_lt()
+   assert_lt(8, -2)
+end
+
+function test_assert_lte()
+   assert_lte(8, -2)
+   assert_lte(8, 8)
+end
+
+function test_assert_len()
+   assert_len(3, { "foo", "bar", "baz" })
+end
+
+function test_assert_not_len()
+   assert_not_len(23, { "foo", "bar", "baz" })
+end
+
+function test_assert_match()
+   assert_match("oo", "string with foo in it")
+end
+
+function test_assert_not_match()
+   assert_not_match("abba zabba", "foo")
+end
+
+function test_assert_boolean()
+   assert_boolean(true)
+   assert_boolean(false)
+end
+
+function test_assert_not_boolean()
+   assert_not_boolean("cheesecake")
+end
+
+function test_assert_number()
+   assert_number(47)
+   assert_number(0)
+   assert_number(math.huge)
+   assert_number(-math.huge)
+end
+
+function test_assert_not_number()
+   assert_not_number(_G)
+   assert_not_number("abc")
+   assert_not_number({1, 2, 3})
+   assert_not_number(false)
+   assert_not_number(function () return 3 end)
+end
+
+function test_assert_string()
+   assert_string("yarn")
+   assert_string("")
+end
+
+function test_assert_not_string()
+   assert_not_string(23)
+   assert_not_string(true)
+   assert_not_string(false)
+   assert_not_string({"1", "2", "3"})
+end
+
+function test_assert_table()
+   assert_table({})
+   assert_table({"1", "2", "3"})
+   assert_table({ foo=true, bar=true, baz=true })
+end
+
+function test_assert_not_table()
+   assert_not_table(nil)
+   assert_not_table(23)
+   assert_not_table("lapdesk")
+   assert_not_table(false)
+   assert_not_table(function () return 3 end)
+end
+
+function test_assert_function()
+   assert_function(function() return "*splat*" end)
+   assert_function(string.format)
+end
+
+function test_assert_not_function()
+   assert_not_function(nil)
+   assert_not_function(23)
+   assert_not_function("lapdesk")
+   assert_not_function(false)
+   assert_not_function(coroutine.create(function () return 3 end))
+   assert_not_function({"1", "2", "3"})
+   assert_not_function({ foo=true, bar=true, baz=true })
+end
+
+function test_assert_thread()
+   assert_thread(coroutine.create(function () return 3 end))
+end
+
+function test_assert_not_thread()
+   assert_not_thread(nil)
+   assert_not_thread(23)
+   assert_not_thread("lapdesk")
+   assert_not_thread(false)
+   assert_not_thread(function () return 3 end)
+   assert_not_thread({"1", "2", "3"})
+   assert_not_thread({ foo=true, bar=true, baz=true })
+end
+
+function test_assert_userdata()
+   assert_userdata(io.open("test.lua", "r"))
+end
+
+function test_assert_not_userdata()
+   assert_not_userdata(nil)
+   assert_not_userdata(23)
+   assert_not_userdata("lapdesk")
+   assert_not_userdata(false)
+   assert_not_userdata(function () return 3 end)
+   assert_not_userdata({"1", "2", "3"})
+   assert_not_userdata({ foo=true, bar=true, baz=true })
+end
+
+function test_assert_metatable()
+   assert_metatable(getmetatable("any string"), "foo")
+   local t = { __index=string }
+   local val = setmetatable( { 1 }, t)
+   assert_metatable(t, val)
+end
+
+function test_assert_not_metatable()
+   assert_not_metatable(getmetatable("any string"), 23)
+end
+
+function test_assert_error()
+   assert_error(function ()
+                   error("*crash!*")
+                end)
+end
+
+lunatest.run()
