@@ -534,6 +534,8 @@ setmetatable(verbose_hooks, {__index = default_hooks })
 local suites = { }
 
 ---Check if a function name should be considered a test key.
+-- Defaults to functions starting or ending with "test", with
+-- leading underscores allowed.
 function is_test_key(k)
    return type(k) == "string" and k:match("_*test.*")
 end
@@ -552,9 +554,8 @@ end
 
 ---Add a file as a test suite.
 -- @param modname The module to load as a suite. The file is
--- interpreted in the same manner as require "modname". All
--- functions whose names begin or end with "test" (optionally
--- preceded by _s) will be added as test cases.
+-- interpreted in the same manner as require "modname".
+-- Which functions are tests is determined by is_test_key(name). 
 function suite(modname)
    local ok, err = pcall(
       function()
@@ -635,10 +636,11 @@ end
 
 ---Run all known test suites, with given configuration hooks.
 -- @param hooks Override the default hooks.
--- @param just Only run a specific suite. TODO
+-- @param suite_filter If set, only run suite(s) with names
+--    matching this pattern.
 -- @usage If no hooks are provided and arg[1] == "-v", the
 -- verbose_hooks will be used.
-function run(hooks, just)
+function run(hooks, suite_filter)
    -- also check the namespace it's run in
    local opts = cmd_line_switches(lt_arg)
    if hooks == true or (hooks == nil and opts.verbose) then
@@ -657,8 +659,10 @@ function run(hooks, just)
 
    if hooks.begin then hooks.begin(results, suites) end
 
+   local suite_filter = opts.suite_pat or suite_filter
+
    for sname,tests in pairs(suites) do
-      if not opts.suite_pat or sname:match(opts.suite_pat) then
+      if not suite_filter or sname:match(suite_filter) then
          local setup, teardown = tests.setup, tests.teardown
          tests.setup, tests.teardown = nil, nil
          if count(tests) > 0 then
