@@ -464,11 +464,17 @@ end
 local function print_totals(r)
    local ps, fs = count(r.pass), count(r.fail)
    local ss, es = count(r.skip), count(r.err)
-   local buf = {"\n---------- Testing finished, ",
-                "with %d assertion(s) ----------\n",
+   local elapsed = ""
+   if r.t_pre and r.t_post then
+      local el, unit = r.t_post - r.t_pre, "s"
+      if el < 1 then unit = "ms"; el = el * 1000 end
+      elapsed = fmt(" in %.2f %s", el, unit)
+   end
+   local buf = {"\n---- Testing finished%s, ",
+                "with %d assertion(s) ----\n",
                 "  %d passed, %d failed, ",
                 "%d error(s), %d skipped."}
-   printf(table.concat(buf), checked, ps, fs, es, ss)
+   printf(table.concat(buf), elapsed, checked, ps, fs, es, ss)
 end
 
 
@@ -652,6 +658,7 @@ function run(hooks, suite_filter)
    setmetatable(hooks, {__index = default_hooks})
 
    local results = result_table("main")
+   if now then results.t_pre = now() end
 
    -- If it's all in one test file, check its environment, too.
    local env = getenv(3)
@@ -679,6 +686,7 @@ function run(hooks, suite_filter)
          end
       end
    end
+   if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end
 
    if failures_or_errors(results) then os.exit(1) end
