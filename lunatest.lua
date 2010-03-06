@@ -988,7 +988,6 @@ local function assert_random(opt, f, ...)
    setmetatable(opt, { __index=random_test_defaults })
 
    local seed = opt.seed or os.time()
-
    local r = { ps={}, fs={}, es={}, ss={}, ts=0, tried={} }
 
    -- Run these seeds every time, for easy regression testing.
