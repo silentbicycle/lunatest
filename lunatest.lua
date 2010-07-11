@@ -42,7 +42,8 @@ local debug, io, math, os, string, table =
 local assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber =
    assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber
 local fmt, tostring, type, unpack = string.format, tostring, type, unpack
-local getmetatable, setmetatable, xpcall = getmetatable, setmetatable, xpcall
+local getmetatable, rawget, setmetatable, xpcall =
+   getmetatable, rawget, setmetatable, xpcall
 local exit, next, require = os.exit, next, require
 
 -- Get containing env, Lua 5.1 and 5.2-compatible.
@@ -553,7 +554,8 @@ local function get_tests(mod)
          ts[k] = v
       end
    end
-   ts.setup, ts.teardown = mod.setup, mod.teardown
+   ts.setup = rawget(mod, "setup")
+   ts.teardown = rawget(mod, "teardown")
    return ts
 end
 
