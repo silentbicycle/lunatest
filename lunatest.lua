@@ -200,8 +200,7 @@ end
 ---got == false.
 function assert_false(got, msg)
    wraptest(not got, msg,
-            { reason=fmt("Expected %s, got %s",
-                         TS(exp), TS(got)) })
+            { reason=fmt("Expected false, got %s", TS(got)) })
 end
 
 --got == nil
