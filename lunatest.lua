@@ -600,10 +600,10 @@ local function run_test(name, test, suite, hooks, setup, teardown)
       function()
          if is_func(setup) then setup(name) end
          test()
-         if now then t_post = now() end
-         if t_pre and t_post then elapsed = t_post - t_pre end
-         if is_func(teardown) then teardown(name, elapsed) end
       end, err_handler(name))
+   if now then t_post = now() end
+   if t_pre and t_post then elapsed = t_post - t_pre end
+   if is_func(teardown) then teardown(name, elapsed) end
 
    if ok then err = Pass() end
    result = err
