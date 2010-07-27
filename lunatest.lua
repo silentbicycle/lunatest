@@ -584,7 +584,7 @@ local ok_types = { pass=true, fail=true, skip=true }
 
 local function err_handler(name)
    return function (e)
-             if e.type and ok_types[e.type()] then return e end
+             if e and e.type and ok_types[e.type()] then return e end
              local msg = fmt("ERROR in %s():\n\t%s", name, tostring(e))
              msg = debug.traceback(msg, 3)
              return Error { msg=msg }
