@@ -118,7 +118,7 @@ function RPass:type() return "pass" end
 function RPass:tostring(name)
    return fmt("PASS: %s%s%s",
               name or "(unknown)", msec(self.elapsed),
-              self.msg and (": " .. self.msg) or "")
+              self.msg and (": " .. tostring(self.msg)) or "")
 end
 
 
@@ -131,7 +131,7 @@ function RFail:tostring(name)
    return fmt("FAIL: %s%s: %s%s",
               name or "(unknown)",
               msec(self.elapsed), self.reason or "",
-              self.msg and (" - " .. self.msg) or "")
+              self.msg and (" - " .. tostring(self.msg)) or "")
 end
 
 
@@ -142,7 +142,7 @@ function RSkip:add(s, name) s.skip[name] = self end
 function RSkip:type() return "skip" end
 function RSkip:tostring(name)
    return fmt("SKIP: %s()%s", name or "unknown",
-              self.msg and (" - " .. self.msg) or "")
+              self.msg and (" - " .. tostring(self.msg)) or "")
 end
 
 
