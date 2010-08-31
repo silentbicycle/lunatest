@@ -494,7 +494,7 @@ default_hooks = {
              print_totals(r)
              for _,ts in ipairs{ r.fail, r.err, r.skip } do
                 for name,res in pairs(ts) do
-                   print(res:tostring(name))
+                   print("%s", res:tostring(name))
                 end
              end
           end,
@@ -524,7 +524,7 @@ verbose_hooks = {
       end,
    pre_test = false,
    post_test = function(name, res)
-                  printf(res:tostring(name))
+                  printf("%s", res:tostring(name))
                   dot_ct = 0
                end,
    done = function(r) print_totals(r) end
