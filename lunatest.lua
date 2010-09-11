@@ -537,7 +537,8 @@ setmetatable(verbose_hooks, {__index = default_hooks })
 -- # Registration #
 -- ################
 
-local suites = { }
+local suites = {}
+local failed_suites = {}
 
 ---Check if a function name should be considered a test key.
 -- Defaults to functions starting or ending with "test", with
@@ -572,6 +573,7 @@ function suite(modname)
    if not ok then
       print(fmt(" * Error loading test suite %q:\n%s",
                 modname, tostring(err)))
+      failed_suites[#failed_suites+1] = modname
    end
 end
 
@@ -690,7 +692,9 @@ function run(hooks, suite_filter)
    if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end
 
-   if failures_or_errors(results) then os.exit(1) end
+   if failures_or_errors(results) or #failed_suites > 0 then
+      os.exit(1)
+   end
 end
 
 
