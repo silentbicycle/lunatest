@@ -494,7 +494,7 @@ default_hooks = {
              print_totals(r)
              for _,ts in ipairs{ r.fail, r.err, r.skip } do
                 for name,res in pairs(ts) do
-                   print("%s", res:tostring(name))
+                   printf("%s", res:tostring(name))
                 end
              end
           end,
