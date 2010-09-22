@@ -118,7 +118,7 @@ function RPass:type() return "pass" end
 function RPass:tostring(name)
    return fmt("PASS: %s%s%s",
               name or "(unknown)", msec(self.elapsed),
-              self.msg and (": " .. self.msg) or "")
+              self.msg and (": " .. tostring(self.msg)) or "")
 end
 
 
@@ -131,7 +131,7 @@ function RFail:tostring(name)
    return fmt("FAIL: %s%s: %s%s",
               name or "(unknown)",
               msec(self.elapsed), self.reason or "",
-              self.msg and (" - " .. self.msg) or "")
+              self.msg and (" - " .. tostring(self.msg)) or "")
 end
 
 
@@ -142,7 +142,7 @@ function RSkip:add(s, name) s.skip[name] = self end
 function RSkip:type() return "skip" end
 function RSkip:tostring(name)
    return fmt("SKIP: %s()%s", name or "unknown",
-              self.msg and (" - " .. self.msg) or "")
+              self.msg and (" - " .. tostring(self.msg)) or "")
 end
 
 
@@ -494,7 +494,7 @@ default_hooks = {
              print_totals(r)
              for _,ts in ipairs{ r.fail, r.err, r.skip } do
                 for name,res in pairs(ts) do
-                   print(res:tostring(name))
+                   printf("%s", res:tostring(name))
                 end
              end
           end,
@@ -524,7 +524,7 @@ verbose_hooks = {
       end,
    pre_test = false,
    post_test = function(name, res)
-                  printf(res:tostring(name))
+                  printf("%s", res:tostring(name))
                   dot_ct = 0
                end,
    done = function(r) print_totals(r) end
@@ -537,7 +537,8 @@ setmetatable(verbose_hooks, {__index = default_hooks })
 -- # Registration #
 -- ################
 
-local suites = { }
+local suites = {}
+local failed_suites = {}
 
 ---Check if a function name should be considered a test key.
 -- Defaults to functions starting or ending with "test", with
@@ -572,6 +573,7 @@ function suite(modname)
    if not ok then
       print(fmt(" * Error loading test suite %q:\n%s",
                 modname, tostring(err)))
+      failed_suites[#failed_suites+1] = modname
    end
 end
 
@@ -690,7 +692,9 @@ function run(hooks, suite_filter)
    if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end
 
-   if failures_or_errors(results) then os.exit(1) end
+   if failures_or_errors(results) or #failed_suites > 0 then
+      os.exit(1)
+   end
 end
 
 
