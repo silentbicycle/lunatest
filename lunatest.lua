@@ -439,6 +439,8 @@ end
 ---Unit testing module, with extensions for random testing.
 module("lunatest")
 
+VERSION = "0.91"
+
 
 -- #########
 -- # Hooks #
