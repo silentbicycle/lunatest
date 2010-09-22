@@ -46,8 +46,8 @@ local getmetatable, rawget, setmetatable, xpcall =
    getmetatable, rawget, setmetatable, xpcall
 local exit, next, require = os.exit, next, require
 
--- Get containing env, Lua 5.1 and 5.2-compatible.
-local getenv = getfenv or debug.getfenv
+-- Get containing env, Lua 5.1-style
+local getenv = getfenv
 
 ---Use lhf's random, if available. It provides an RNG with better
 -- statistical properties, and it gives consistent values across OSs.
@@ -976,6 +976,27 @@ local function run_randtest(seed, f, args, r, limit)
 end
 
 
+local function report_trial(r, opt)
+   if #r.es > 0 then
+      local seeds = get_seeds_and_args(r.es)
+      error(Fail { reason = fmt("%d tests, %d error(s).\n   %s",
+                                  r.ts, #r.es,
+                                  table.concat(seeds, "\n   ")),
+                   seeds = seeds})
+   elseif #r.fs > 0 then
+      local seeds = get_seeds_and_args(r.fs)
+      error(Fail { reason = fmt("%d tests, %d failure(s).\n   %s",
+                                  r.ts, #r.fs,
+                                  table.concat(seeds, "\n   ")),
+                   seeds = seeds})
+   elseif #r.ss >= opt.max_skips then
+      error(Fail { reason = fmt("Too many cases skipped.")})
+   else
+      error(Pass { reason = fmt(": %d cases passed.", #r.ps) })
+   end
+end
+
+
 local function assert_random(opt, f, ...)
    local args = { ... }
    if type(opt) == "string" then
@@ -1012,23 +1033,7 @@ local function assert_random(opt, f, ...)
    end
    local overall_status = (passed == count and "PASS" or "FAIL")
    
-   if #r.es > 0 then
-      local seeds = get_seeds_and_args(r.es)
-      error(Fail { reason = fmt("%d tests, %d error(s).\n   %s",
-                                  r.ts, #r.es,
-                                  table.concat(seeds, "\n   ")),
-                   seeds = seeds})
-   elseif #r.fs > 0 then
-      local seeds = get_seeds_and_args(r.fs)
-      error(Fail { reason = fmt("%d tests, %d failure(s).\n   %s",
-                                  r.ts, #r.fs,
-                                  table.concat(seeds, "\n   ")),
-                   seeds = seeds})
-   elseif #r.ss >= opt.max_skips then
-      error(Fail { reason = fmt("Too many cases skipped.")})
-   else
-      error(Pass { reason = fmt(": %d cases passed.", #r.ps) })
-   end
+   report_trial(r, opt)
 end
 
 
