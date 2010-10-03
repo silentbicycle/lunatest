@@ -609,8 +609,10 @@ local function run_test(name, test, suite, hooks, setup, teardown)
       end, err_handler(name))
    if now then t_post = now() end
    if t_pre and t_post then elapsed = t_post - t_pre end
-   if is_func(teardown) then teardown(name, elapsed) end
 
+   if ok and is_func(teardown) then
+      ok, err = xpcall(function() teardown(name, elapsed) end, err_handler(name))
+   end
    if ok then err = Pass() end
    result = err
    if elapsed then result.elapsed = elapsed end
