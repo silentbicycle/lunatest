@@ -194,7 +194,7 @@ function skip(msg) error(Skip { msg=msg }) end
 -- (Named "assert_true" to not conflict with standard assert.)
 -- @param msg Message to display with the result.
 function assert_true(got, msg)
-   wraptest(got, msg, { reason="Expected success." })
+   wraptest(got, msg, { reason=fmt("Expected success, got %s.", TS(got)) })
 end
 
 ---got == false.
@@ -211,14 +211,14 @@ end
 
 --got ~= nil
 function assert_not_nil(got, msg)
-   wraptest(got ~= nil, msg, { reason=fmt("Expected non-nil value") })
+   wraptest(got ~= nil, msg,
+            { reason=fmt("Expected non-nil value, got %s", TS(got)) })
 end
 
 ---exp == got.
 function assert_equal(exp, got, msg)
    wraptest(exp == got, msg,
-            { reason=fmt("Expected %q, got %q",
-                         TS(exp), TS(got)) })
+            { reason=fmt("Expected %q, got %q", TS(exp), TS(got)) })
 end
 
 ---exp ~= got.
@@ -402,7 +402,7 @@ function assert_error(f, msg)
    local ok, err = pcall(f)
    wraptest(not ok, msg,
             { exp="an error", got=ok or err,
-              reason="Expected an error" })
+              reason=fmt("Expected an error, got %s", TS(got)) })
 end
 
 
