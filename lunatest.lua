@@ -555,9 +555,10 @@ local function get_tests(mod)
    end
    ts.setup = rawget(mod, "setup")
    ts.teardown = rawget(mod, "teardown")
+   ts.ssetup = rawget(mod, "suite_setup")
+   ts.steardown = rawget(mod, "suite_teardown")
    return ts
 end
-
 
 ---Add a file as a test suite.
 -- @param modname The module to load as a suite. The file is
@@ -642,29 +643,31 @@ end
 
 
 local function run_suite(hooks, opts, results, suite_filter, sname, tests)
+   local ssetup, steardown = tests.ssetup, tests.steardown
+   tests.ssetup, tests.steardown = nil, nil
+
    if not suite_filter or sname:match(suite_filter) then
-      local setup_suite = tests.setup_suite
-      local teardown_suite = tests.teardown_suite
       local run_suite = true
-      if setup_suite then
-         local ok, err = setup_suite()
+      if ssetup then
+         local ok, err = pcall(ssetup)
          if not ok or (ok and err == false) then run_suite = false end
       end
-      -- ... run_suite
+      if not run_suite then return end
       
       local setup, teardown = tests.setup, tests.teardown
       tests.setup, tests.teardown = nil, nil
       if count(tests) > 0 then
-         local suite = result_table(sname)
-         if hooks.begin_suite then hooks.begin_suite(suite, tests) end
-         suite.tests = suite
+         local res = result_table(sname)
+         if hooks.begin_suite then hooks.begin_suite(res, tests) end
+         res.tests = tests
          for name, test in pairs(tests) do
             if not opts.test_pat or name:match(opts.test_pat) then
-               run_test(name, test, suite, hooks, setup, teardown)
+               run_test(name, test, res, hooks, setup, teardown)
             end
          end
-         if hooks.end_suite then hooks.end_suite(suite) end
-         combine_results(results, suite)
+         if steardown then pcall(steardown) end
+         if hooks.end_suite then hooks.end_suite(res) end
+         combine_results(results, res)
       end
    end
 end
@@ -697,8 +700,8 @@ function run(hooks, suite_filter)
 
    local suite_filter = opts.suite_pat or suite_filter
 
-   for sname,tests in pairs(suites) do
-      run_suite(hooks, opts, results, suite_filter, sname, tests)
+   for sname,suite in pairs(suites) do
+      run_suite(hooks, opts, results, suite_filter, sname, suite)
    end
    if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end

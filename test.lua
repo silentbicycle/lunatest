@@ -8,6 +8,8 @@ print '=============================='
 
 
 lunatest.suite("suite-with-random-tests")
+lunatest.suite("suite-hooks")
+lunatest.suite("suite-hooks-fail")
 
 function test_fail()
    -- the true here is so the test run as a whole still succeeds.
