@@ -641,6 +641,34 @@ local function failures_or_errors(r)
 end
 
 
+local function run_suite(hooks, opts, results, suite_filter, sname, tests)
+   if not suite_filter or sname:match(suite_filter) then
+      local setup_suite = tests.setup_suite
+      local teardown_suite = tests.teardown_suite
+      local run_suite = true
+      if setup_suite then
+         local ok, err = setup_suite()
+         if not ok or (ok and err == false) then run_suite = false end
+      end
+      -- ... run_suite
+      
+      local setup, teardown = tests.setup, tests.teardown
+      tests.setup, tests.teardown = nil, nil
+      if count(tests) > 0 then
+         local suite = result_table(sname)
+         if hooks.begin_suite then hooks.begin_suite(suite, tests) end
+         suite.tests = suite
+         for name, test in pairs(tests) do
+            if not opts.test_pat or name:match(opts.test_pat) then
+               run_test(name, test, suite, hooks, setup, teardown)
+            end
+         end
+         if hooks.end_suite then hooks.end_suite(suite) end
+         combine_results(results, suite)
+      end
+   end
+end
+
 ---Run all known test suites, with given configuration hooks.
 -- @param hooks Override the default hooks.
 -- @param suite_filter If set, only run suite(s) with names
@@ -670,22 +698,7 @@ function run(hooks, suite_filter)
    local suite_filter = opts.suite_pat or suite_filter
 
    for sname,tests in pairs(suites) do
-      if not suite_filter or sname:match(suite_filter) then
-         local setup, teardown = tests.setup, tests.teardown
-         tests.setup, tests.teardown = nil, nil
-         if count(tests) > 0 then
-            local suite = result_table(sname)
-            if hooks.begin_suite then hooks.begin_suite(suite, tests) end
-            suite.tests = suite
-            for name, test in pairs(tests) do
-               if not opts.test_pat or name:match(opts.test_pat) then
-                  run_test(name, test, suite, hooks, setup, teardown)
-               end
-            end
-            if hooks.end_suite then hooks.end_suite(suite) end
-            combine_results(results, suite)
-         end
-      end
+      run_suite(hooks, opts, results, suite_filter, sname, tests)
    end
    if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end
