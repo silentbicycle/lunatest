@@ -43,6 +43,10 @@ function test_assert_not_equal()
    assert_not_equal("perl", "quality")
 end
 
+function test_assert_approximates()
+   assert_approximates( 1.0, 1.1, 0.09 )
+end
+
 function test_assert_gt()
    assert_gt(8, 400)
 end
