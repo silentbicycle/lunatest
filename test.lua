@@ -41,6 +41,10 @@ function test_assert_equal()
    assert_equal(4, 4)
 end
 
+function test_assert_equal_tolerance()
+   assert_equal(4, 4.0001, 0.0001, "Should approximately match")
+end
+
 function test_assert_not_equal()
    assert_not_equal("perl", "quality")
 end

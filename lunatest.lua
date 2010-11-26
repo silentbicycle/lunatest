@@ -215,10 +215,26 @@ function assert_not_nil(got, msg)
             { reason=fmt("Expected non-nil value, got %s", TS(got)) })
 end
 
+local function tol_or_msg(t, m)
+   if not t and not m then return 0, nil
+   elseif type(t) == "string" then return 0, t
+   elseif type(t) == "number" then return t, m
+   else error("Neither a numeric tolerance nor string")
+   end
+end
+
+
 ---exp == got.
-function assert_equal(exp, got, msg)
-   wraptest(exp == got, msg,
-            { reason=fmt("Expected %q, got %q", TS(exp), TS(got)) })
+function assert_equal(exp, got, tol, msg)
+   tol, msg = tol_or_msg(tol, msg)
+   if type(exp) == "number" and type(got) == "number" then
+      wraptest(math.abs(exp - got) <= tol, msg,
+               { reason=fmt("Expected %s +/- %s, got %s",
+                            TS(exp), TS(tol), TS(got)) })
+   else
+      wraptest(exp == got, msg,
+               { reason=fmt("Expected %q, got %q", TS(exp), TS(got)) })
+   end
 end
 
 ---exp ~= got.
