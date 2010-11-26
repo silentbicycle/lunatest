@@ -1,4 +1,4 @@
-pcall(require, "luacov")
+pcall(require, "luacov")    --measure code coverage, if luacov is present
 require "lunatest"
 
 print '=============================='
@@ -191,6 +191,13 @@ function test_assert_error()
    assert_error(function ()
                    error("*crash!*")
                 end)
+end
+
+-- This caused a crash when matching a string with invalid % escapes.
+-- Thanks to Diab Jerius for the bugfix.
+function test_failure_formatting()
+   local inv_esc = "str with invalid escape %( in it"
+   assert_match(inv_esc, inv_esc, "Should fail but not crash")
 end
 
 lunatest.run()

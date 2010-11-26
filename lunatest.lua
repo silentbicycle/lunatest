@@ -46,8 +46,8 @@ local getmetatable, rawget, setmetatable, xpcall =
    getmetatable, rawget, setmetatable, xpcall
 local exit, next, require = os.exit, next, require
 
--- Get containing env, Lua 5.1 and 5.2-compatible.
-local getenv = getfenv or debug.getfenv
+-- Get containing env, Lua 5.1-style
+local getenv = getfenv
 
 ---Use lhf's random, if available. It provides an RNG with better
 -- statistical properties, and it gives consistent values across OSs.
@@ -455,6 +455,8 @@ end
 ---Unit testing module, with extensions for random testing.
 module("lunatest")
 
+VERSION = "0.91"
+
 
 -- #########
 -- # Hooks #
@@ -510,7 +512,7 @@ default_hooks = {
              print_totals(r)
              for _,ts in ipairs{ r.fail, r.err, r.skip } do
                 for name,res in pairs(ts) do
-                   print(res:tostring(name))
+                   printf("%s", res:tostring(name))
                 end
              end
           end,
@@ -540,7 +542,7 @@ verbose_hooks = {
       end,
    pre_test = false,
    post_test = function(name, res)
-                  printf(res:tostring(name))
+                  printf("%s", res:tostring(name))
                   dot_ct = 0
                end,
    done = function(r) print_totals(r) end
@@ -553,7 +555,8 @@ setmetatable(verbose_hooks, {__index = default_hooks })
 -- # Registration #
 -- ################
 
-local suites = { }
+local suites = {}
+local failed_suites = {}
 
 ---Check if a function name should be considered a test key.
 -- Defaults to functions starting or ending with "test", with
@@ -589,6 +592,7 @@ function suite(modname)
    if not ok then
       print(fmt(" * Error loading test suite %q:\n%s",
                 modname, tostring(err)))
+      failed_suites[#failed_suites+1] = modname
    end
 end
 
@@ -601,7 +605,7 @@ local ok_types = { pass=true, fail=true, skip=true }
 
 local function err_handler(name)
    return function (e)
-             if e.type and ok_types[e.type()] then return e end
+             if e and e.type and ok_types[e.type()] then return e end
              local msg = fmt("ERROR in %s():\n\t%s", name, tostring(e))
              msg = debug.traceback(msg, 3)
              return Error { msg=msg }
@@ -622,8 +626,10 @@ local function run_test(name, test, suite, hooks, setup, teardown)
       end, err_handler(name))
    if now then t_post = now() end
    if t_pre and t_post then elapsed = t_post - t_pre end
-   if is_func(teardown) then teardown(name, elapsed) end
 
+   if ok and is_func(teardown) then
+      ok, err = xpcall(function() teardown(name, elapsed) end, err_handler(name))
+   end
    if ok then err = Pass() end
    result = err
    if elapsed then result.elapsed = elapsed end
@@ -722,7 +728,9 @@ function run(hooks, suite_filter)
    if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end
 
-   if failures_or_errors(results) then os.exit(1) end
+   if failures_or_errors(results) or #failed_suites > 0 then
+      os.exit(1)
+   end
 end
 
 
@@ -1008,6 +1016,27 @@ local function run_randtest(seed, f, args, r, limit)
 end
 
 
+local function report_trial(r, opt)
+   if #r.es > 0 then
+      local seeds = get_seeds_and_args(r.es)
+      error(Fail { reason = fmt("%d tests, %d error(s).\n   %s",
+                                  r.ts, #r.es,
+                                  table.concat(seeds, "\n   ")),
+                   seeds = seeds})
+   elseif #r.fs > 0 then
+      local seeds = get_seeds_and_args(r.fs)
+      error(Fail { reason = fmt("%d tests, %d failure(s).\n   %s",
+                                  r.ts, #r.fs,
+                                  table.concat(seeds, "\n   ")),
+                   seeds = seeds})
+   elseif #r.ss >= opt.max_skips then
+      error(Fail { reason = fmt("Too many cases skipped.")})
+   else
+      error(Pass { reason = fmt(": %d cases passed.", #r.ps) })
+   end
+end
+
+
 local function assert_random(opt, f, ...)
    local args = { ... }
    if type(opt) == "string" then
@@ -1044,23 +1073,7 @@ local function assert_random(opt, f, ...)
    end
    local overall_status = (passed == count and "PASS" or "FAIL")
    
-   if #r.es > 0 then
-      local seeds = get_seeds_and_args(r.es)
-      error(Fail { reason = fmt("%d tests, %d error(s).\n   %s",
-                                  r.ts, #r.es,
-                                  table.concat(seeds, "\n   ")),
-                   seeds = seeds})
-   elseif #r.fs > 0 then
-      local seeds = get_seeds_and_args(r.fs)
-      error(Fail { reason = fmt("%d tests, %d failure(s).\n   %s",
-                                  r.ts, #r.fs,
-                                  table.concat(seeds, "\n   ")),
-                   seeds = seeds})
-   elseif #r.ss >= opt.max_skips then
-      error(Fail { reason = fmt("Too many cases skipped.")})
-   else
-      error(Pass { reason = fmt(": %d cases passed.", #r.ps) })
-   end
+   report_trial(r, opt)
 end
 
 
