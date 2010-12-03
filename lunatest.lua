@@ -663,23 +663,28 @@ local function failures_or_errors(r)
    end
 end
 
-
 local function run_suite(hooks, opts, results, suite_filter, sname, tests)
    local ssetup, steardown = tests.ssetup, tests.steardown
    tests.ssetup, tests.steardown = nil, nil
 
    if not suite_filter or sname:match(suite_filter) then
       local run_suite = true
+      local res = result_table(sname)
+
       if ssetup then
          local ok, err = pcall(ssetup)
-         if not ok or (ok and err == false) then run_suite = false end
+         if not ok or (ok and err == false) then
+            run_suite = false
+            local msg = fmt("Error in %s's suite_setup: %s", sname, tostring(err))
+            failed_suites[#failed_suites+1] = sname
+            results.err[sname] = Error{msg=msg}
+         end
       end
-      if not run_suite then return end
       
-      local setup, teardown = tests.setup, tests.teardown
-      tests.setup, tests.teardown = nil, nil
-      if count(tests) > 0 then
-         local res = result_table(sname)
+      if run_suite and count(tests) > 0 then
+         local setup, teardown = tests.setup, tests.teardown
+         tests.setup, tests.teardown = nil, nil
+
          if hooks.begin_suite then hooks.begin_suite(res, tests) end
          res.tests = tests
          for name, test in pairs(tests) do

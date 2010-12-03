@@ -4,7 +4,7 @@ module(..., package.seeall)
 -- will prevent the suite from running.
 function suite_setup()
    print "\n\n-- (about to fail and abort suite)"
-   -- if true then return false end
+   if true then return false end
    error("don't run this suite")
 end
 
