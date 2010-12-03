@@ -1066,9 +1066,9 @@ local function assert_random(opt, f, ...)
 
    for i=1,opt.count do
       seed = run_randtest(seed, f, args, r, opt.seed_limit)
-      if #r.ss > opt.max_skips or
-         #r.fs > opt.max_failures or
-         #r.es > opt.max_errors then break
+      if #r.ss >= opt.max_skips or
+         #r.fs >= opt.max_failures or
+         #r.es >= opt.max_errors then break
       end
       if opt.show_progress and i % tick == 0 then
          dot(".")
