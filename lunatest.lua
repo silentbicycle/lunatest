@@ -960,12 +960,16 @@ end
 local function get_seeds_and_args(t)
    local ss = {}
    for _,r in ipairs(t) do
-      if r.seed then ss[#ss+1] = fmt("%s %s", r.seed, r.msg or "") end
+      if r.seed then
+         ss[#ss+1] = fmt("%s %s\n   Seed: %s",
+                         r.reason or "", r.msg and ("\n   " .. r.msg) or "", r.seed)
+      end
       if r.args then
          for i,arg in ipairs(r.args) do
             ss[#ss+1] = "  * " .. arg
          end
       end
+      ss[#ss+1] = ""
    end
    return ss
 end
