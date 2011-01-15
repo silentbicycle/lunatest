@@ -642,6 +642,7 @@ end
 
 
 local function cmd_line_switches(arg)
+   arg = arg or {}
    local opts = {}
    for i=1,#arg do
       local v = arg[i]
