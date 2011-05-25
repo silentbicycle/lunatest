@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Lunatest
+Bundle-SymbolicName: com.github.lunatest
+Bundle-Version: 0.9.1
+Bundle-Activator: com.github.lunatest.LunaTest
+Bundle-Vendor: GITHUB
+Require-Bundle: org.eclipse.core.runtime
+Bundle-RequiredExecutionEnvironment: JavaSE-1.6
+Bundle-ActivationPolicy: lazy
+Export-Package: com.github.lunatest
