@@ -1078,7 +1078,6 @@ local function assert_random(opt, f, ...)
       end
       if opt.show_progress and i % tick == 0 then
          dot(".")
-         io.stdout:flush()
       end
    end
    local overall_status = (passed == count and "PASS" or "FAIL")
