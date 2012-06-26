@@ -55,9 +55,15 @@ local getenv = getfenv
 pcall(require, "random")
 local random = random
 
----If available, use luasocket's gettime() for timestamps.
-pcall(require, "socket")
-local now = socket and socket.gettime
+-- Use luasocket's gettime(), or luaposix' gettimeofday() for timestamps,
+-- if available.
+local now = pcall(require, "socket") and socket.gettime or
+            pcall(require, "posix") and posix.gettimeofday and
+            function ()
+               local s, us = posix.gettimeofday()
+               return s + us / 1000000
+            end or
+            nil
 
 -- Get env immediately wrapping module, to put assert_ tests there.
 local _importing_env = getenv()
