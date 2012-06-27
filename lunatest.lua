@@ -55,15 +55,15 @@ local getenv = getfenv
 pcall(require, "random")
 local random = random
 
--- Use luasocket's gettime(), or luaposix' gettimeofday() for timestamps,
--- if available.
+-- Use luasocket's gettime(), luaposix' gettimeofday(), or os.date for
+-- timestamps
 local now = pcall(require, "socket") and socket.gettime or
             pcall(require, "posix") and posix.gettimeofday and
             function ()
                local s, us = posix.gettimeofday()
                return s + us / 1000000
             end or
-            nil
+            function () return tonumber(os.date("%s")) end
 
 -- Get env immediately wrapping module, to put assert_ tests there.
 local _importing_env = getenv()
@@ -488,12 +488,9 @@ end
 local function print_totals(r)
    local ps, fs = count(r.pass), count(r.fail)
    local ss, es = count(r.skip), count(r.err)
-   local elapsed = ""
-   if r.t_pre and r.t_post then
-      local el, unit = r.t_post - r.t_pre, "s"
-      if el < 1 then unit = "ms"; el = el * 1000 end
-      elapsed = fmt(" in %.2f %s", el, unit)
-   end
+   local el, unit = r.t_post - r.t_pre, "s"
+   if el < 1 then unit = "ms"; el = el * 1000 end
+   local elapsed = fmt(" in %.2f %s", el, unit)
    local buf = {"\n---- Testing finished%s, ",
                 "with %d assertion(s) ----\n",
                 "  %d passed, %d failed, ",
@@ -632,10 +629,10 @@ local function run_test(name, test, suite, hooks, setup, teardown)
    end
 
    if ok then
-      if now then t_pre = now() end
+      t_pre = now()
       ok, err = xpcall(test, err_handler(name))
-      if now then t_post = now() end
-      if t_pre and t_post then elapsed = t_post - t_pre end
+      t_post = now()
+      elapsed = t_post - t_pre
 
       if is_func(teardown) then
          if ok then
@@ -655,7 +652,7 @@ local function run_test(name, test, suite, hooks, setup, teardown)
 
    if ok then err = Pass() end
    result = err
-   if elapsed then result.elapsed = elapsed end
+   result.elapsed = elapsed
 
    -- TODO: log tests w/ no assertions?
    result:add(suite, name)
@@ -750,7 +747,7 @@ function run(hooks, suite_filter)
    setmetatable(hooks, {__index = default_hooks})
 
    local results = result_table("main")
-   if now then results.t_pre = now() end
+   results.t_pre = now()
 
    -- If it's all in one test file, check its environment, too.
    local env = getenv(3)
@@ -763,7 +760,7 @@ function run(hooks, suite_filter)
    for sname,suite in pairs(suites) do
       run_suite(hooks, opts, results, suite_filter, sname, suite)
    end
-   if now then results.t_post = now() end
+   results.t_post = now()
    if hooks.done then hooks.done(results) end
 
    local failures = failure_or_error_count(results)
