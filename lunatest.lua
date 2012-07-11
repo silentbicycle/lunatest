@@ -617,13 +617,18 @@ local function run_test(name, test, suite, hooks, setup, teardown)
    local result
    if is_func(hooks.pre_test) then hooks.pre_test(name) end
    local t_pre, t_post, elapsed      --timestamps. requires luasocket.
+   local ok, err
+
+   if is_func(setup) then
+      ok, err = xpcall(function() setup(name) end, err_handler(name))
+   else
+      ok = true
+   end
+
    if now then t_pre = now() end
-   
-   local ok, err = xpcall(
-      function()
-         if is_func(setup) then setup(name) end
-         test()
-      end, err_handler(name))
+   if ok then
+      ok, err = xpcall(test, err_handler(name))
+   end
    if now then t_post = now() end
    if t_pre and t_post then elapsed = t_post - t_pre end
 
