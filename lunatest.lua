@@ -709,6 +709,11 @@ end
 function run(hooks, suite_filter)
    -- also check the namespace it's run in
    local opts = cmd_line_switches(lt_arg)
+
+   -- Make stdout line-buffered for better interactivity when the output is
+   -- not going to the terminal, e.g. is piped to another program.
+   io.stdout:setvbuf("line")
+
    if hooks == true or (hooks == nil and opts.verbose) then
       hooks = verbose_hooks
    else
@@ -1078,7 +1083,6 @@ local function assert_random(opt, f, ...)
       end
       if opt.show_progress and i % tick == 0 then
          dot(".")
-         io.stdout:flush()
       end
    end
    local overall_status = (passed == count and "PASS" or "FAIL")
