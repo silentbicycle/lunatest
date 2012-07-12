@@ -455,7 +455,7 @@ end
 ---Unit testing module, with extensions for random testing.
 module("lunatest")
 
-VERSION = "0.93"
+VERSION = "0.94"
 
 
 -- #########
@@ -674,11 +674,15 @@ local function cmd_line_switches(arg)
 end
 
 
-local function failures_or_errors(r)
-   if next(r.err) then return true end
-   for k,f in pairs(r.fail) do
-      if not f.no_exit then return true end
+local function failure_or_error_count(r)
+   local t = 0
+   for k,f in pairs(r.err) do
+      t = t + 1
    end
+   for k,f in pairs(r.fail) do
+      if not f.no_exit then t = t + 1 end
+   end
+   return t
 end
 
 local function run_suite(hooks, opts, results, suite_filter, sname, tests)
@@ -756,9 +760,9 @@ function run(hooks, suite_filter)
    if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end
 
-   if failures_or_errors(results) or #failed_suites > 0 then
-      os.exit(1)
-   end
+   if #failed_suites > 0 then os.exit(#failed_suites) end
+   local failures = failure_or_error_count(results)
+   if failures > 0 then os.exit(failures) end
 end
 
 
