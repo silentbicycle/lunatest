@@ -760,9 +760,9 @@ function run(hooks, suite_filter)
    if now then results.t_post = now() end
    if hooks.done then hooks.done(results) end
 
-   if #failed_suites > 0 then os.exit(#failed_suites) end
    local failures = failure_or_error_count(results)
    if failures > 0 then os.exit(failures) end
+   if #failed_suites > 0 then os.exit(#failed_suites) end
 end
 
 
