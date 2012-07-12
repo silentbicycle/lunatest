@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------
 --
--- Copyright (c) 2009 Scott Vokes <vokes.s@gmail.com>
+-- Copyright (c) 2009-12 Scott Vokes <vokes.s@gmail.com>
 --
 -- Permission is hereby granted, free of charge, to any person
 -- obtaining a copy of this software and associated documentation
@@ -455,7 +455,7 @@ end
 ---Unit testing module, with extensions for random testing.
 module("lunatest")
 
-VERSION = "0.92"
+VERSION = "0.93"
 
 
 -- #########
@@ -636,7 +636,13 @@ local function run_test(name, test, suite, hooks, setup, teardown)
             ok, err = xpcall(function() teardown(name, elapsed) end,
                              err_handler(name))
          else
-            pcall(teardown, name, elapsed)
+            xpcall(function() teardown(name, elapsed) end,
+                   function(info)
+                      print "\n==============================================="
+                      local msg = fmt("ERROR in teardown handler: %s", info)
+                      print(msg)
+                      os.exit(1)
+                   end)
          end
       end
    end
