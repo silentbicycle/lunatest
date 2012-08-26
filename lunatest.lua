@@ -562,10 +562,10 @@ local suites = {}
 local failed_suites = {}
 
 ---Check if a function name should be considered a test key.
--- Defaults to functions starting or ending with "test", with
--- leading underscores allowed.
+-- Defaults to functions starting with "test", with leading
+-- underscores allowed.
 function is_test_key(k)
-   return type(k) == "string" and k:match("_*test.*")
+   return type(k) == "string" and k:match("^_*test")
 end
 
 local function get_tests(mod)
