@@ -570,16 +570,19 @@ end
 
 local function get_tests(mod)
    local ts = {}
-   for k,v in pairs(mod) do
-      if is_test_key(k) and type(v) == "function" then
-         ts[k] = v
-      end
+   if type(mod) == "table" then
+       for k,v in pairs(mod) do
+           if is_test_key(k) and type(v) == "function" then
+               ts[k] = v
+           end
+       end
+       ts.setup = rawget(mod, "setup")
+       ts.teardown = rawget(mod, "teardown")
+       ts.ssetup = rawget(mod, "suite_setup")
+       ts.steardown = rawget(mod, "suite_teardown")
+       return ts
    end
-   ts.setup = rawget(mod, "setup")
-   ts.teardown = rawget(mod, "teardown")
-   ts.ssetup = rawget(mod, "suite_setup")
-   ts.steardown = rawget(mod, "suite_teardown")
-   return ts
+   return {}
 end
 
 ---Add a file as a test suite.
