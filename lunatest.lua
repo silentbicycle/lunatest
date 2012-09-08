@@ -55,6 +55,10 @@ local getenv = getfenv
 pcall(require, "random")
 local random = random
 
+-- Use the debug API to get line numbers, if available.
+pcall(require, "debug")
+local debug = debug
+
 -- Use luasocket's gettime(), luaposix' gettimeofday(), or os.date for
 -- timestamps
 local now = pcall(require, "socket") and socket.gettime or
@@ -134,10 +138,12 @@ function RFail:tostring_char() return "F" end
 function RFail:add(s, name) s.fail[name] = self end
 function RFail:type() return "fail" end
 function RFail:tostring(name)
-   return fmt("FAIL: %s%s: %s%s",
+   return fmt("FAIL: %s%s: %s%s%s",
               name or "(unknown)",
-              msec(self.elapsed), self.reason or "",
-              self.msg and (" - " .. tostring(self.msg)) or "")
+              msec(self.elapsed),
+              self.reason or "",
+              self.msg and (" - " .. tostring(self.msg)) or "",
+              self.line and (" (%d)"):format(self.line) or "")
 end
 
 
@@ -181,6 +187,10 @@ local TS = tostring
 local function wraptest(flag, msg, t)
    checked = checked + 1
    t.msg = msg
+   if debug then
+       local info = debug.getinfo(3, "l")
+       t.line = info.currentline
+   end
    if not flag then error(Fail(t)) end
 end
 
@@ -188,7 +198,12 @@ end
 -- @param no_exit Unless set to true, the presence of any failures
 -- causes the test suite to terminate with an exit status of 1.
 function fail(msg, no_exit)
-   error(Fail { msg=msg, reason="(Failed)", no_exit=no_exit })
+   local line
+   if debug then
+       local info = debug.getinfo(2, "l")
+       line = info.currentline
+   end
+   error(Fail { msg=msg, reason="(Failed)", no_exit=no_exit, line=line })
 end
 
 
