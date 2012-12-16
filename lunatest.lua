@@ -46,9 +46,6 @@ local getmetatable, rawget, setmetatable, xpcall =
    getmetatable, rawget, setmetatable, xpcall
 local exit, next, require = os.exit, next, require
 
--- Get containing env, Lua 5.1-style
-local getenv = getfenv
-
 ---Use lhf's random, if available. It provides an RNG with better
 -- statistical properties, and it gives consistent values across OSs.
 -- http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
@@ -59,6 +56,14 @@ local random = random
 pcall(require, "debug")
 local debug = debug
 
+-- Get containing env, using 5.1's getfenv or emulating it in 5.2
+local getenv = getfenv or function(level)
+    local info = debug.getinfo(level or 2)
+    local n, v = debug.getupvalue(info.func, 1)
+    assert(n == "_ENV", n)
+    return v
+end
+
 -- Use luasocket's gettime(), luaposix' gettimeofday(), or os.date for
 -- timestamps
 local now = pcall(require, "socket") and socket.gettime or
@@ -67,7 +72,7 @@ local now = pcall(require, "socket") and socket.gettime or
                local s, us = posix.gettimeofday()
                return s + us / 1000000
             end or
-            function () return tonumber(os.date("%s")) end
+            function () return tonumber(os.time()) end
 
 -- Get env immediately wrapping module, to put assert_ tests there.
 local _importing_env = getenv()
