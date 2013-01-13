@@ -706,11 +706,11 @@ local function failure_or_error_count(r)
    return t
 end
 
-local function run_suite(hooks, opts, results, suite_filter, sname, tests)
+local function run_suite(hooks, opts, results, sname, tests)
    local ssetup, steardown = tests.ssetup, tests.steardown
    tests.ssetup, tests.steardown = nil, nil
 
-   if not suite_filter or sname:match(suite_filter) then
+   if not opts.suite_pat or sname:match(opts.suite_pat) then
       local run_suite = true
       local res = result_table(sname)
 
@@ -744,19 +744,18 @@ end
 
 ---Run all known test suites, with given configuration hooks.
 -- @param hooks Override the default hooks.
--- @param suite_filter If set, only run suite(s) with names
---    matching this pattern.
--- @usage If no hooks are provided and arg[1] == "-v", the
--- verbose_hooks will be used.
-function run(hooks, suite_filter)
+-- @param opts Override command line arguments.
+-- @usage If no hooks are provided and arg[1] == "-v", the verbose_hooks will
+-- be used. opts is expected to be a table of command line arguments.
+function run(hooks, opts)
    -- also check the namespace it's run in
-   local opts = cmd_line_switches(lt_arg)
+   local opts = opts and cmd_line_switches(opts) or cmd_line_switches(lt_arg)
 
    -- Make stdout line-buffered for better interactivity when the output is
    -- not going to the terminal, e.g. is piped to another program.
    io.stdout:setvbuf("line")
 
-   if hooks == true or (hooks == nil and opts.verbose) then
+   if hooks == true or opts.verbose then
       hooks = verbose_hooks
    else
       hooks = hooks or {}
@@ -773,10 +772,8 @@ function run(hooks, suite_filter)
 
    if hooks.begin then hooks.begin(results, suites) end
 
-   local suite_filter = opts.suite_pat or suite_filter
-
    for sname,suite in pairs(suites) do
-      run_suite(hooks, opts, results, suite_filter, sname, suite)
+      run_suite(hooks, opts, results, sname, suite)
    end
    results.t_post = now()
    if hooks.done then hooks.done(results) end
