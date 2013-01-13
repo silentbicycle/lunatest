@@ -437,8 +437,9 @@ end
 ---Test that the function raises an error when called.
 function assert_error(f, msg)
    local ok, err = pcall(f)
+   local got = ok or err
    wraptest(not ok, msg,
-            { exp="an error", got=ok or err,
+            { exp="an error", got=got,
               reason=fmt("Expected an error, got %s", TS(got)) })
 end
 
