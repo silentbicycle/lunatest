@@ -8,7 +8,7 @@ It's largely upwardly compatible from [lunit][], with the following changes:
 * If running tests in only one file, no module declaration is necessary.
 * For multiple suites, register them with lunatest.suite("file").
   This uses require to load the suite, and uses the same methods to
-  match filenames with modules.
+  match filenames with modules. (Note: should use module(...) in the file.)
 * It doesn't have any dependencies except Lua, though if present, it
   will use lhf's [lrandom][] module (for consistent pseudorandom numbers
   across operating systems) and [luasocket][]'s gettime() for timestamps).
