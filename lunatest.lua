@@ -503,6 +503,7 @@ end
 local function print_totals(r)
    local ps, fs = count(r.pass), count(r.fail)
    local ss, es = count(r.skip), count(r.err)
+   if checked == 0 then return end
    local el, unit = r.t_post - r.t_pre, "s"
    if el < 1 then unit = "ms"; el = el * 1000 end
    local elapsed = fmt(" in %.2f %s", el, unit)
