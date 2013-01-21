@@ -193,6 +193,26 @@ function test_assert_error()
                 end)
 end
 
+-- Test different test name conventions
+
+function __test_name()
+end
+
+function testCamelCase()
+end
+
+function some_test()
+    fail('wrong function name')
+end
+
+function this_test_should_not_run()
+    fail('wrong function name')
+end
+
+function thistestshouldnotrun()
+    fail('wrong function name')
+end
+
 -- This caused a crash when matching a string with invalid % escapes.
 -- Thanks to Diab Jerius for the bugfix.
 function test_failure_formatting()
