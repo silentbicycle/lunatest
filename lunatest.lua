@@ -582,7 +582,7 @@ local failed_suites = {}
 -- Defaults to functions starting or ending with "test", with
 -- leading underscores allowed.
 function is_test_key(k)
-   return type(k) == "string" and k:match("_*test.*")
+   return type(k) == "string" and (k:match("^test.*") or k:match("test$"))
 end
 
 local function get_tests(mod)
