@@ -264,6 +264,13 @@ function assert_not_equal(exp, got, msg)
             { reason="Expected something other than " .. TS(exp) })
 end
 
+--- exp approximates got to within delta.
+function assert_approximates( exp, got, delta, msg )
+	wraptest( ( math.abs(exp - got) < math.abs(delta) ), 
+	          msg, { reason = fmt( "Expected %s  [+/- %s], got %s", TS(exp), TS(delta), TS(got)) })
+
+end
+
 ---val > lim.
 function assert_gt(lim, val, msg)
    wraptest(val > lim, msg,
