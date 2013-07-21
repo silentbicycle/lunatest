@@ -66,10 +66,10 @@ end
 
 -- Use luasocket's gettime(), luaposix' gettimeofday(), or os.date for
 -- timestamps
-local now = pcall(require, "socket") and socket.gettime or
-            pcall(require, "posix") and posix.gettimeofday and
+local now = pcall(require, "socket") and package.loaded.socket.gettime or
+            pcall(require, "posix") and package.loaded.posix.gettimeofday and
             function ()
-               local s, us = posix.gettimeofday()
+               local s, us = package.loaded.posix.gettimeofday()
                return s + us / 1000000
             end or
             function () return tonumber(os.time()) end
