@@ -1,4 +1,4 @@
-require "lunatest"
+local lunatest = require "lunatest"
 
 -- This should error out with a more meaningful error message
 -- than "./lunatest.lua:608: attempt to index local 'e' (a function value)".

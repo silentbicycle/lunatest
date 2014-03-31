@@ -1,8 +1,8 @@
 package = "lunatest"
-version = "0.9.1-0"
+version = "0.9.5-0"
 source = {
    url = "git://github.com/silentbicycle/lunatest.git",
-   tag = "v0.9.1"
+   tag = "v0.9.5"
 }
 description = {
    summary = "xUnit-style + randomized unit testing framework",
@@ -25,5 +25,5 @@ build = {
    type = "builtin",
    modules = {
       lunatest = "lunatest.lua"
-   }           
+   }
 }

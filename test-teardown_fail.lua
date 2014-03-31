@@ -1,4 +1,4 @@
-require "lunatest"
+local lunatest = require "lunatest"
 
 function busywait(n)
    n = n or 10000

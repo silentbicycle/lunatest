@@ -41,36 +41,38 @@ local debug, io, math, os, string, table =
 -- required core global functions
 local assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber =
    assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber
-local fmt, tostring, type, unpack = string.format, tostring, type, unpack
+local fmt, tostring, type = string.format, tostring, type
+local unpack = table.unpack or unpack
 local getmetatable, rawget, setmetatable, xpcall =
    getmetatable, rawget, setmetatable, xpcall
 local exit, next, require = os.exit, next, require
 
--- Get containing env, Lua 5.1-style
-local getenv = getfenv
+-- Get containing env, using 5.1's getfenv or emulating it in 5.2
+local getenv = getfenv or function(level)
+   local info = debug.getinfo(level or 2)
+   local n, v = debug.getupvalue(info.func, 1)
+   assert(n == "_ENV", n)
+   return v
+end
 
 ---Use lhf's random, if available. It provides an RNG with better
 -- statistical properties, and it gives consistent values across OSs.
 -- http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
-pcall(require, "random")
-local random = random
+local random = pcall(require, "random") and package.loaded.random or nil
 
 -- Use the debug API to get line numbers, if available.
-pcall(require, "debug")
-local debug = debug
+local debug = pcall(require, "debug") and package.loaded.debug or debug
 
--- Use luasocket's gettime(), luaposix' gettimeofday(), or os.date for
+-- Use luasocket's gettime(), luaposix' gettimeofday(), or os.time for
 -- timestamps
-local now = pcall(require, "socket") and socket.gettime or
-            pcall(require, "posix") and posix.gettimeofday and
-            function ()
-               local s, us = posix.gettimeofday()
-               return s + us / 1000000
-            end or
-            function () return tonumber(os.date("%s")) end
-
--- Get env immediately wrapping module, to put assert_ tests there.
-local _importing_env = getenv()
+local now = pcall(require, "socket") and package.loaded.socket.gettime
+   or pcall(require, "posix") and package.loaded.posix.gettimeofday and
+         function ()
+            local t = package.loaded.posix.gettimeofday()
+            local s, us = t.sec, t.usec
+            return s + us / 1000000
+         end
+   or os.time
 
 -- Check command line arguments:
 -- -v / --verbose, default to verbose_hooks.
@@ -194,10 +196,14 @@ local function wraptest(flag, msg, t)
    if not flag then error(Fail(t)) end
 end
 
+-- @module lunatest
+local lunatest = {}
+lunatest.VERSION = 0.95
+
 ---Fail a test.
 -- @param no_exit Unless set to true, the presence of any failures
 -- causes the test suite to terminate with an exit status of 1.
-function fail(msg, no_exit)
+function lunatest.fail(msg, no_exit)
    local line
    if debug then
        local info = debug.getinfo(2, "l")
@@ -208,30 +214,30 @@ end
 
 
 ---Skip a test, with a note, e.g. "TODO".
-function skip(msg) error(Skip { msg=msg }) end
+function lunatest.skip(msg) error(Skip { msg=msg }) end
 
 
 ---got == true.
 -- (Named "assert_true" to not conflict with standard assert.)
 -- @param msg Message to display with the result.
-function assert_true(got, msg)
+function lunatest.assert_true(got, msg)
    wraptest(got, msg, { reason=fmt("Expected success, got %s.", TS(got)) })
 end
 
 ---got == false.
-function assert_false(got, msg)
+function lunatest.assert_false(got, msg)
    wraptest(not got, msg,
             { reason=fmt("Expected false, got %s", TS(got)) })
 end
 
 --got == nil
-function assert_nil(got, msg)
+function lunatest.assert_nil(got, msg)
    wraptest(got == nil, msg,
             { reason=fmt("Expected nil, got %s", TS(got)) })
 end
 
 --got ~= nil
-function assert_not_nil(got, msg)
+function lunatest.assert_not_nil(got, msg)
    wraptest(got ~= nil, msg,
             { reason=fmt("Expected non-nil value, got %s", TS(got)) })
 end
@@ -246,7 +252,7 @@ end
 
 
 ---exp == got.
-function assert_equal(exp, got, tol, msg)
+function lunatest.assert_equal(exp, got, tol, msg)
    tol, msg = tol_or_msg(tol, msg)
    if type(exp) == "number" and type(got) == "number" then
       wraptest(math.abs(exp - got) <= tol, msg,
@@ -259,54 +265,54 @@ function assert_equal(exp, got, tol, msg)
 end
 
 ---exp ~= got.
-function assert_not_equal(exp, got, msg)
+function lunatest.assert_not_equal(exp, got, msg)
    wraptest(exp ~= got, msg,
             { reason="Expected something other than " .. TS(exp) })
 end
 
 ---val > lim.
-function assert_gt(lim, val, msg)
+function lunatest.assert_gt(lim, val, msg)
    wraptest(val > lim, msg,
             { reason=fmt("Expected a value > %s, got %s",
                          TS(lim), TS(val)) })
 end
 
 ---val >= lim.
-function assert_gte(lim, val, msg)
+function lunatest.assert_gte(lim, val, msg)
    wraptest(val >= lim, msg,
             { reason=fmt("Expected a value >= %s, got %s",
                          TS(lim), TS(val)) })
 end
 
 ---val < lim.
-function assert_lt(lim, val, msg)
+function lunatest.assert_lt(lim, val, msg)
    wraptest(val < lim, msg,
             { reason=fmt("Expected a value < %s, got %s",
                          TS(lim), TS(val)) })
 end
 
 ---val <= lim.
-function assert_lte(lim, val, msg)
+function lunatest.assert_lte(lim, val, msg)
    wraptest(val <= lim, msg,
             { reason=fmt("Expected a value <= %s, got %s",
                          TS(lim), TS(val)) })
 end
 
 ---#val == len.
-function assert_len(len, val, msg)
+function lunatest.assert_len(len, val, msg)
    wraptest(#val == len, msg,
             { reason=fmt("Expected #val == %d, was %d",
                          len, #val) })
 end
 
 ---#val ~= len.
-function assert_not_len(len, val, msg)
+function lunatest.assert_not_len(len, val, msg)
    wraptest(#val ~= len, msg,
             { reason=fmt("Expected length other than %d", len) })
 end
 
 ---Test that the string s matches the pattern exp.
-function assert_match(pat, s, msg)
+function lunatest.assert_match(pat, s, msg)
    s = tostring(s)
    wraptest(type(s) == "string" and s:match(pat), msg,
             { reason=fmt("Expected string to match pattern %s, was %s",
@@ -315,111 +321,111 @@ function assert_match(pat, s, msg)
 end
 
 ---Test that the string s doesn't match the pattern exp.
-function assert_not_match(pat, s, msg)
+function lunatest.assert_not_match(pat, s, msg)
    wraptest(type(s) ~= "string" or not s:match(pat), msg,
             { reason=fmt("Should not match pattern %s", pat) })
 end
 
 ---Test that val is a boolean.
-function assert_boolean(val, msg)
+function lunatest.assert_boolean(val, msg)
    wraptest(type(val) == "boolean", msg,
             { reason=fmt("Expected type boolean but got %s",
                          type(val)) })
 end
 
 ---Test that val is not a boolean.
-function assert_not_boolean(val, msg)
+function lunatest.assert_not_boolean(val, msg)
    wraptest(type(val) ~= "boolean", msg,
             { reason=fmt("Expected type other than boolean but got %s",
                          type(val)) })
 end
 
 ---Test that val is a number.
-function assert_number(val, msg)
+function lunatest.assert_number(val, msg)
    wraptest(type(val) == "number", msg,
             { reason=fmt("Expected type number but got %s",
                          type(val)) })
 end
 
 ---Test that val is not a number.
-function assert_not_number(val, msg)
+function lunatest.assert_not_number(val, msg)
    wraptest(type(val) ~= "number", msg,
             { reason=fmt("Expected type other than number but got %s",
                          type(val)) })
 end
 
 ---Test that val is a string.
-function assert_string(val, msg)
+function lunatest.assert_string(val, msg)
    wraptest(type(val) == "string", msg,
             { reason=fmt("Expected type string but got %s",
                          type(val)) })
 end
 
 ---Test that val is not a string.
-function assert_not_string(val, msg)
+function lunatest.assert_not_string(val, msg)
    wraptest(type(val) ~= "string", msg,
             { reason=fmt("Expected type other than string but got %s",
                          type(val)) })
 end
 
 ---Test that val is a table.
-function assert_table(val, msg)
+function lunatest.assert_table(val, msg)
    wraptest(type(val) == "table", msg,
             { reason=fmt("Expected type table but got %s",
                          type(val)) })
 end
 
 ---Test that val is not a table.
-function assert_not_table(val, msg)
+function lunatest.assert_not_table(val, msg)
    wraptest(type(val) ~= "table", msg,
             { reason=fmt("Expected type other than table but got %s",
                          type(val)) })
 end
 
 ---Test that val is a function.
-function assert_function(val, msg)
+function lunatest.assert_function(val, msg)
    wraptest(type(val) == "function", msg,
             { reason=fmt("Expected type function but got %s",
                          type(val)) })
 end
 
 ---Test that val is not a function.
-function assert_not_function(val, msg)
+function lunatest.assert_not_function(val, msg)
    wraptest(type(val) ~= "function", msg,
             { reason=fmt("Expected type other than function but got %s",
                          type(val)) })
 end
 
 ---Test that val is a thread (coroutine).
-function assert_thread(val, msg)
+function lunatest.assert_thread(val, msg)
    wraptest(type(val) == "thread", msg,
             { reason=fmt("Expected type thread but got %s",
                          type(val)) })
 end
 
 ---Test that val is not a thread (coroutine).
-function assert_not_thread(val, msg)
+function lunatest.assert_not_thread(val, msg)
    wraptest(type(val) ~= "thread", msg,
             { reason=fmt("Expected type other than thread but got %s",
                          type(val)) })
 end
 
 ---Test that val is a userdata (light or heavy).
-function assert_userdata(val, msg)
+function lunatest.assert_userdata(val, msg)
    wraptest(type(val) == "userdata", msg,
             { reason=fmt("Expected type userdata but got %s",
                          type(val)) })
 end
 
 ---Test that val is not a userdata (light or heavy).
-function assert_not_userdata(val, msg)
+function lunatest.assert_not_userdata(val, msg)
    wraptest(type(val) ~= "userdata", msg,
             { reason=fmt("Expected type other than userdata but got %s",
                          type(val)) })
 end
 
 ---Test that a value has the expected metatable.
-function assert_metatable(exp, val, msg)
+function lunatest.assert_metatable(exp, val, msg)
    local mt = getmetatable(val)
    wraptest(mt == exp, msg,
             { reason=fmt("Expected metatable %s but got %s",
@@ -427,7 +433,7 @@ function assert_metatable(exp, val, msg)
 end
 
 ---Test that a value does not have a given metatable.
-function assert_not_metatable(exp, val, msg)
+function lunatest.assert_not_metatable(exp, val, msg)
    local mt = getmetatable(val)
    wraptest(mt ~= exp, msg,
             { reason=fmt("Expected metatable other than %s",
@@ -435,50 +441,13 @@ function assert_not_metatable(exp, val, msg)
 end
 
 ---Test that the function raises an error when called.
-function assert_error(f, msg)
+function lunatest.assert_error(f, msg)
    local ok, err = pcall(f)
    local got = ok or err
    wraptest(not ok, msg,
             { exp="an error", got=got,
               reason=fmt("Expected an error, got %s", TS(got)) })
 end
-
-
----Run a test case with randomly instantiated arguments,
--- running the test function f opt.count (default: 100) times.
--- @param opt A table with options, or just a test name string.<br>
---    opt.count: how many random trials to perform<br>
---    opt.seed: Start the batch of trials with a specific seed<br>
---    opt.always: Always test these seeds (for regressions)<br>
---    opt.show_progress: Whether to print a . after every opt.tick trials.<br>
---    opt.seed_limit: Max seed to allow.<br>
---    opt.max_failures, max_errors, max_skips: Give up after X of each.<br>
--- @param f A test function, run as f(unpack(randomized_args(...)))
--- @param ... the arg specification. For each argument, creates a
---    random instance of that type.<br>
---    boolean: return true or false<br>
---    number n: returns 0 <= x < n, or -n <= x < n if negative.
---              If n has a decimal component, so will the result.<br>
---    string: Specifiedd as "(len[,maxlen]) (pattern)".<br>
---        "10 %l" means 10 random lowercase letters.<br>
---        "10,30 [aeiou]" means between 10-30 vowels.<br>
---    function: Just call (as f()) and return result.<br>
---    table or userdata: Call v.__random() and return result.<br>
--- @usage 
-function assert_random(opt, f, ...)
-   -- Stub. Exported to the same namespace, but code appears below.
-end
-
-
--- ####################
--- # Module beginning #
--- ####################
-
----Unit testing module, with extensions for random testing.
-module("lunatest")
-
-VERSION = "0.94"
-
 
 -- #########
 -- # Hooks #
@@ -579,11 +548,13 @@ local suites = {}
 local failed_suites = {}
 
 ---Check if a function name should be considered a test key.
--- Defaults to functions starting or ending with "test", with
--- leading underscores allowed.
-function is_test_key(k)
+-- Defaults to functions starting or ending with "test"
+local function is_test_key(k)
    return type(k) == "string" and (k:match("^test.*") or k:match("test$"))
 end
+
+-- export is_test_key to enable user to customize this matching function
+lunatest.is_test_key = is_test_key
 
 local function get_tests(mod)
    local ts = {}
@@ -606,11 +577,11 @@ end
 -- @param modname The module to load as a suite. The file is
 -- interpreted in the same manner as require "modname".
 -- Which functions are tests is determined by is_test_key(name). 
-function suite(modname)
+function lunatest.suite(modname)
    local ok, err = pcall(
       function()
          local mod, r_err = require(modname)
-         suites[modname] = get_tests(mod)
+         table.insert(suites, {name = modname, tests = get_tests(mod)})
       end)
    if not ok then
       print(fmt(" * Error loading test suite %q:\n%s",
@@ -629,7 +600,7 @@ local ok_types = { pass=true, fail=true, skip=true }
 local function err_handler(name)
    return function (e)
              if type(e) == "table" and e.type and ok_types[e.type()] then return e end
-             local msg = fmt("ERROR in %s():\n\t%s", name, tostring(e))
+             local msg = fmt("\nERROR in %s():\n\t%s", name, tostring(e))
              msg = debug.traceback(msg, 3)
              return Error { msg=msg }
           end
@@ -682,7 +653,7 @@ end
 
 
 local function cmd_line_switches(arg)
-   arg = arg or {}
+   local arg = arg or {}
    local opts = {}
    for i=1,#arg do
       local v = arg[i]
@@ -725,7 +696,7 @@ local function run_suite(hooks, opts, results, sname, tests)
             results.err[sname] = Error{msg=msg}
          end
       end
-      
+
       if run_suite and count(tests) > 0 then
          local setup, teardown = tests.setup, tests.teardown
          tests.setup, tests.teardown = nil, nil
@@ -749,7 +720,7 @@ end
 -- @param opts Override command line arguments.
 -- @usage If no hooks are provided and arg[1] == "-v", the verbose_hooks will
 -- be used. opts is expected to be a table of command line arguments.
-function run(hooks, opts)
+function lunatest.run(hooks, opts)
    -- also check the namespace it's run in
    local opts = opts and cmd_line_switches(opts) or cmd_line_switches(lt_arg)
 
@@ -770,12 +741,15 @@ function run(hooks, opts)
 
    -- If it's all in one test file, check its environment, too.
    local env = getenv(3)
-   if env then suites.main = get_tests(env) end
+   if env then
+      local main_suite = {name = "main", tests = get_tests(env)}
+      table.insert(suites, main_suite)
+   end
 
    if hooks.begin then hooks.begin(results, suites) end
 
-   for sname,suite in pairs(suites) do
-      run_suite(hooks, opts, results, sname, suite)
+   for _,suite in ipairs(suites) do
+      run_suite(hooks, opts, results, suite.name, suite.tests)
    end
    results.t_post = now()
    if hooks.done then hooks.done(results) end
@@ -790,39 +764,33 @@ end
 -- # Randomization basics #
 -- ########################
 
-local _r
+local set_seed
+local random_int
+local random_bool
+local random_float
+
 if random then
-   _r = random.new()
-end
+   local _r = random.new()
 
----Set random seed.
-function set_seed(s) _r:seed(s) end
-
----Get a random value low <= x <= high.
-function random_int(low, high)
-   if not high then high = low; low = 0 end
-   return _r:value(low, high)
-end
-
----Get a random bool.
-function random_bool() return random_int(0, 1) == 1 end
-
----Get a random float low <= x < high.
-function random_float(low, high)
-   return random_int(low, high - 1) + _r:value()
-end
-
-
-if not random then
+   set_seed = function(s) _r:seed(s) end
+   random_int = function(low, high)
+      if not high then high = low; low = 0 end
+      return _r:value(low, high)
+   end
+   random_bool = function() return random_int(0, 1) == 1 end
+   random_float = function(low, high)
+      return random_int(low, high - 1) + _r:value()
+   end
+else
    set_seed = math.randomseed
    random_bool = function() return math.random(0, 1) == 1 end
    random_float = function(l, h)
-                     return random_int(l, h - 1) + math.random()
-                  end
+      return random_int(l, h - 1) + math.random()
+   end
    random_int = function(l, h)
-                   if not h then h = l; l = 0 end
-                   return math.random(l, h)
-                end
+      if not h then h = l; l = 0 end
+      return math.random(l, h)
+   end
 end
 
 -- Lua_number's bits of precision. IEEE 754 doubles have 52.
@@ -920,7 +888,7 @@ end
 
 -- Generate a random string.
 -- @usage e.g. "20 listoftwentycharstogenerate" or "10,20 %l".
-function random_string(spec)
+local function random_string(spec)
    local info = parse_randstring(spec)
    local ct, diff
    diff = info.high - info.low
@@ -1093,7 +1061,46 @@ local function report_trial(r, opt)
 end
 
 
-local function assert_random(opt, f, ...)
+---Set random seed.
+lunatest.set_seed = set_seed
+
+---Get a random value low <= x <= high.
+lunatest.random_int = random_int
+
+---Get a random bool.
+lunatest.random_bool = random_bool
+
+---Get a random float low <= x < high.
+lunatest.random_float = random_float
+
+---Get a random string
+lunatest.random_string = random_string
+
+---Get a random argument
+lunatest.random_args = random_args
+
+---Run a test case with randomly instantiated arguments,
+-- running the test function f opt.count (default: 100) times.
+-- @param opt A table with options, or just a test name string.<br>
+--    opt.count: how many random trials to perform<br>
+--    opt.seed: Start the batch of trials with a specific seed<br>
+--    opt.always: Always test these seeds (for regressions)<br>
+--    opt.show_progress: Whether to print a . after every opt.tick trials.<br>
+--    opt.seed_limit: Max seed to allow.<br>
+--    opt.max_failures, max_errors, max_skips: Give up after X of each.<br>
+-- @param f A test function, run as f(unpack(randomized_args(...)))
+-- @param ... the arg specification. For each argument, creates a
+--    random instance of that type.<br>
+--    boolean: return true or false<br>
+--    number n: returns 0 <= x < n, or -n <= x < n if negative.
+--              If n has a decimal component, so will the result.<br>
+--    string: Specifiedd as "(len[,maxlen]) (pattern)".<br>
+--        "10 %l" means 10 random lowercase letters.<br>
+--        "10,30 [aeiou]" means between 10-30 vowels.<br>
+--    function: Just call (as f()) and return result.<br>
+--    table or userdata: Call v.__random() and return result.<br>
+-- @usage
+function lunatest.assert_random(opt, f, ...)
    local args = { ... }
    if type(opt) == "string" then
       opt = { name=opt }
@@ -1131,6 +1138,5 @@ local function assert_random(opt, f, ...)
    report_trial(r, opt)
 end
 
-
--- Put it in the same namespace as the other assert_ functions.
-_importing_env.assert_random = assert_random
+-- export module
+return lunatest
