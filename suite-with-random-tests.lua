@@ -1,18 +1,27 @@
-module(..., package.seeall)
+-- @module suite_with_random_tests
+local suite_with_random_tests = {}
 
 -- Several random tests, with arguments specified both
 -- via functions and via consts.
 
 local seed = os.time()
+local lunatest = package.loaded.lunatest
 lunatest.set_seed(seed)
 print("Seed is ", seed)
 
-local random_bool, random_int = 
-   lunatest.random_bool, lunatest.random_int
-local random_float, random_string = 
-   lunatest.random_float, lunatest.random_string
+local random_bool= lunatest.random_bool
+local random_int = lunatest.random_int
+local random_float = lunatest.random_float
+local random_string = lunatest.random_string
+local assert_random = lunatest.assert_random
+local assert_len = lunatest.assert_len
+local assert_match = lunatest.assert_match
+local assert_boolean = lunatest.assert_boolean
+local assert_lt, assert_lte = lunatest.assert_lt, lunatest.assert_lte
+local assert_gt, assert_gte = lunatest.assert_gt, lunatest.assert_gte
+local assert_number= lunatest.assert_number
 
-function test_random_bool()
+function suite_with_random_tests.test_random_bool()
    assert_random("bool is t or f",
                  function (b)
                     return b == true or b == false
@@ -20,7 +29,7 @@ function test_random_bool()
 end
 
 
-function test_random_bool2()
+function suite_with_random_tests.test_random_bool2()
    assert_random("bool is t or f",
                  function ()
                     return random_bool()
@@ -28,7 +37,7 @@ function test_random_bool2()
 end
 
 
-function test_random_int()
+function suite_with_random_tests.test_random_int()
    assert_random({name="pos int", count=1000 },
                  function ()
                     local ri = random_int(1, 10) 
@@ -36,14 +45,14 @@ function test_random_int()
                  end)
 end
 
-function test_random_int2()
+function suite_with_random_tests.test_random_int2()
    assert_random({ name="pos int", count=1000 },
                  function (ri)
                     return ri >= 0 and ri <= 10
                  end, 10)
 end
 
-function test_neg_int()
+function suite_with_random_tests.test_neg_int()
    assert_random({ name="neg int", count=1000 },
                  function ()
                     local ni = random_int(-math.huge, 0)
@@ -51,7 +60,7 @@ function test_neg_int()
                  end)
 end
 
-function test_neg_or_pos_int()
+function suite_with_random_tests.test_neg_or_pos_int()
    assert_random({ name="neg int", count=1000 },
                  function (i)
                     assert_number(i)
@@ -61,7 +70,7 @@ function test_neg_or_pos_int()
 end
 
 
-function test_random_int_trio()
+function suite_with_random_tests.test_random_int_trio()
    assert_random({ name="three ints", count=1000 },
                  function ()
                     local ri = random_int
@@ -72,7 +81,7 @@ function test_random_int_trio()
                  end)
 end
 
-function test_random_float()
+function suite_with_random_tests.test_random_float()
    assert_random({ name="float", count=1000 },
                  function ()
                     local rf = random_float
@@ -80,7 +89,7 @@ function test_random_float()
                  end)
 end
 
-function test_random_float2()
+function suite_with_random_tests.test_random_float2()
    assert_random({ name="float", count=1000 },
                  function (x)
                     assert_gt(0, x)
@@ -88,7 +97,7 @@ function test_random_float2()
 end
 
 
-function test_random_string()
+function suite_with_random_tests.test_random_string()
    assert_random("vowels",
                  function (x)
                     local len = string.len(x)
@@ -97,7 +106,7 @@ function test_random_string()
                  end, "10 aeiou")
 end
 
-function test_random_string2()
+function suite_with_random_tests.test_random_string2()
    -- In the first argument, .always={...} is a list of seeds
    -- that will be run every trial.
    assert_random( { name="alpha",
@@ -110,7 +119,7 @@ function test_random_string2()
                  end, "10,30 %a")
 end
 
-function test_coinflip()
+function suite_with_random_tests.test_coinflip()
    local function rbool() return random_bool() end
    -- typically, this would go in a metatable...
    local coin = { __random = rbool }
@@ -121,7 +130,7 @@ function test_coinflip()
 end
 
 
-function test_random_int_bounds()
+function suite_with_random_tests.test_random_int_bounds()
    for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1}, 
                             {-100, 100}, {-1, 0}, {0, 1} } do
       assert_random("int_bounds",
@@ -133,7 +142,7 @@ function test_random_int_bounds()
    end
 end
 
-function test_random_int_bounds()
+function suite_with_random_tests.test_random_int_bounds()
    for run, pair in ipairs{ {1, 2}, {2, 10}, {-1, 1}, 
                             {-100, 100}, {-1, 0}, {0, 1} } do
       assert_random("float_bounds",
@@ -146,7 +155,7 @@ function test_random_int_bounds()
 end
 
 
-function test_random_str_len()
+function suite_with_random_tests.test_random_str_len()
    local fmt = string.format
    for _,l in ipairs{ 1, 5, 10, 15, 30 } do
       assert_random("strlen",
@@ -160,7 +169,7 @@ function test_random_str_len()
 end
 
 
-function test_random_str_range()
+function suite_with_random_tests.test_random_str_range()
    local fmt = string.format
    assert_random("strlen2",
                  function()
@@ -170,3 +179,5 @@ function test_random_str_range()
                     assert_match("^%l+$", rs)
                  end)
 end
+
+return suite_with_random_tests

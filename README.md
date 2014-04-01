@@ -7,8 +7,9 @@ It's largely upwardly compatible from [lunit][], with the following changes:
   not change any functions from the standard library.
 * If running tests in only one file, no module declaration is necessary.
 * For multiple suites, register them with lunatest.suite("file").
-  This uses require to load the suite, and uses the same methods to
-  match filenames with modules. (Note: should use module(...) in the file.)
+  This uses require the file suite to return a table containing the suite
+  related functions as well as the test functions. (Note: non local tests
+  functions found outside the returned table go to the main suite.)
 * It doesn't have any dependencies except Lua, though if present, it
   will use lhf's [lrandom][] module (for consistent pseudorandom numbers
   across operating systems) and [luasocket][]'s gettime() for timestamps).
