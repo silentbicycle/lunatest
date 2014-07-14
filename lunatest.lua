@@ -740,7 +740,7 @@ function lunatest.run(hooks, opts)
    results.t_pre = now()
 
    -- If it's all in one test file, check its environment, too.
-   local env = getenv(3)
+   local env = os.getenv(3)
    if env then
       local main_suite = {name = "main", tests = get_tests(env)}
       table.insert(suites, main_suite)
