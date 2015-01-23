@@ -51,7 +51,7 @@ local exit, next, require = os.exit, next, require
 local getenv = getfenv or function(level)
    local info = debug.getinfo(level or 2)
    local n, v = debug.getupvalue(info.func, 1)
-   assert(n == "_ENV", n)
+   --assert(n == "_ENV", n)
    return v
 end
 
