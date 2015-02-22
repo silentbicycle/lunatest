@@ -27,3 +27,5 @@ supported:
 [luasocket]: http://luaforge.net/projects/luasocket/
 
 For further examples, see the API documentation and included test suite.
+
+Like Lua itself, Lunatest is distributed under the MIT license.
