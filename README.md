@@ -22,7 +22,7 @@ supported:
 * -s / --suite *pattern*: Only run suite(s) with names matching the pattern.
 * -t / --test *pattern*: Only run test(s) with names matching the pattern.
 
-[lunit]: http://www.nessie.de/mroth/lunit/
+[lunit]: http://www.mroth.net/lunit/
 [lrandom]: http://www.tecgraf.puc-rio.br/~lhf/ftp/lua/#lrandom
 [luasocket]: http://luaforge.net/projects/luasocket/
 
