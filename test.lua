@@ -211,6 +211,16 @@ function test_assert_error()
                 end)
 end
 
+function test_assert_error_with_args()
+   assert_error(function (a)
+                   if a ~= nil then
+                      error("*crash!*")
+                   end
+                end,
+                "function should crash when argument 1 is set",
+                "arg1")
+end
+
 -- This caused a crash when matching a string with invalid % escapes.
 -- Thanks to Diab Jerius for the bugfix.
 function test_failure_formatting()

@@ -441,8 +441,8 @@ function lunatest.assert_not_metatable(exp, val, msg)
 end
 
 ---Test that the function raises an error when called.
-function lunatest.assert_error(f, msg)
-   local ok, err = pcall(f)
+function lunatest.assert_error(f, msg, ...)
+   local ok, err = pcall(f, ...)
    local got = ok or err
    wraptest(not ok, msg,
             { exp="an error", got=got,
