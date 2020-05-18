@@ -486,7 +486,7 @@ end
 
 
 ---Default behavior.
-default_hooks = {
+local default_hooks = {
    begin = false,
    begin_suite = function(s_env, tests)
                     iow(fmt("\n-- Starting suite %q, %d test(s)\n  ",
@@ -509,8 +509,8 @@ default_hooks = {
 
 
 ---Default verbose behavior.
-verbose_hooks = {
-   begin = function(res, suites)
+local verbose_hooks = {
+   begin = function(_, suites)
               local s_ct = count(suites)
               if s_ct > 0 then
                  printf("Starting tests, %d suite(s)", s_ct)
