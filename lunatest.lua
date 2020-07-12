@@ -13,7 +13,7 @@
 --
 -- The above copyright notice and this permission notice shall be
 -- included in all copies or substantial portions of the Software.
--- 
+--
 -- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 -- EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
 -- OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -114,7 +114,7 @@ end
 -- ###########
 
 local function fmt_msec(t)
-   if t and type(t) == "number" then 
+   if t and type(t) == "number" then
       return fmt(" (%.2fms)", t * 1000)
    else
       return ""
@@ -576,7 +576,7 @@ end
 ---Add a file as a test suite.
 -- @param modname The module to load as a suite. The file is
 -- interpreted in the same manner as require "modname".
--- Which functions are tests is determined by is_test_key(name). 
+-- Which functions are tests is determined by is_test_key(name).
 function lunatest.suite(modname)
    local ok, err = pcall(
       function()
@@ -895,7 +895,7 @@ local function random_string(spec)
    if diff == 0 then ct = info.low else
       ct = random_int(diff) + info.low
    end
-   
+
    local acc = {}
    for i=1,ct do
       acc[i] = info.gen(self)
@@ -1027,7 +1027,7 @@ local function run_randtest(seed, f, args, r, limit)
       else error("unmatched")
       end
    end
-   
+
    seed = new_seed(limit)
    r.ts = r.ts + 1
    local str_args = {}
@@ -1109,7 +1109,7 @@ function lunatest.assert_random(opt, f, ...)
       f = opt
       opt = {}
    end
-      
+
    setmetatable(opt, { __index=random_test_defaults })
 
    local seed = opt.seed or os.time()
@@ -1134,7 +1134,7 @@ function lunatest.assert_random(opt, f, ...)
       end
    end
    local overall_status = (passed == count and "PASS" or "FAIL")
-   
+
    report_trial(r, opt)
 end
 
