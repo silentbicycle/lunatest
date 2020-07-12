@@ -39,13 +39,13 @@ local debug, io, math, os, string, table =
    debug, io, math, os, string, table
 
 -- required core global functions
-local assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber =
-   assert, error, ipairs, pairs, pcall, print, setmetatable, tonumber
+local assert, error, ipairs, pairs, pcall, print, tonumber =
+   assert, error, ipairs, pairs, pcall, print, tonumber
 local fmt, tostring, type = string.format, tostring, type
 local unpack = table.unpack or unpack
 local getmetatable, rawget, setmetatable, xpcall =
    getmetatable, rawget, setmetatable, xpcall
-local exit, next, require = os.exit, next, require
+local exit, require = os.exit, require
 
 -- Get containing env, using 5.1's getfenv or emulating it in 5.2
 local getenv = getfenv or function(level)
@@ -124,9 +124,9 @@ end
 
 local RPass = {}
 local passMT = {__index=RPass}
-function RPass:tostring_char() return "." end
+function RPass.tostring_char() return "." end
 function RPass:add(s, name) s.pass[name] = self end
-function RPass:type() return "pass" end
+function RPass.type() return "pass" end
 function RPass:tostring(name)
    return fmt("PASS: %s%s%s",
               name or "(unknown)", fmt_msec(self.elapsed),
@@ -136,9 +136,9 @@ end
 
 local RFail = {}
 local failMT = {__index=RFail}
-function RFail:tostring_char() return "F" end
+function RFail.tostring_char() return "F" end
 function RFail:add(s, name) s.fail[name] = self end
-function RFail:type() return "fail" end
+function RFail.type() return "fail" end
 function RFail:tostring(name)
    return fmt("FAIL: %s%s: %s%s%s",
               name or "(unknown)",
@@ -151,9 +151,9 @@ end
 
 local RSkip = {}
 local skipMT = {__index=RSkip}
-function RSkip:tostring_char() return "s" end
+function RSkip.tostring_char() return "s" end
 function RSkip:add(s, name) s.skip[name] = self end
-function RSkip:type() return "skip" end
+function RSkip.type() return "skip" end
 function RSkip:tostring(name)
    return fmt("SKIP: %s()%s", name or "unknown",
               self.msg and (" - " .. tostring(self.msg)) or "")
@@ -162,9 +162,9 @@ end
 
 local RError = {}
 local errorMT = {__index=RError}
-function RError:tostring_char() return "E" end
+function RError.tostring_char() return "E" end
 function RError:add(s, name) s.err[name] = self end
-function RError:type() return "error" end
+function RError.type() return "error" end
 function RError:tostring(name)
    return self.msg or
       fmt("ERROR (in %s%s, couldn't get traceback)",
@@ -494,7 +494,7 @@ default_hooks = {
                  end,
    end_suite = false,
    pre_test = false,
-   post_test = function(name, res)
+   post_test = function(_, res)
                   dot(res:tostring_char())
                end,
    done = function(r)
@@ -510,7 +510,7 @@ default_hooks = {
 
 ---Default verbose behavior.
 verbose_hooks = {
-   begin = function(res, suites)
+   begin = function(_, suites)
               local s_ct = count(suites)
               if s_ct > 0 then
                  printf("Starting tests, %d suite(s)", s_ct)
@@ -580,7 +580,7 @@ end
 function lunatest.suite(modname)
    local ok, err = pcall(
       function()
-         local mod, r_err = require(modname)
+         local mod = assert(require(modname))
          table.insert(suites, {name = modname, tests = get_tests(mod)})
       end)
    if not ok then
@@ -635,7 +635,7 @@ local function run_test(name, test, suite, hooks, setup, teardown)
                       print "\n==============================================="
                       local msg = fmt("ERROR in teardown handler: %s", info)
                       print(msg)
-                      os.exit(1)
+                      exit(1)
                    end)
          end
       end
@@ -653,7 +653,7 @@ end
 
 
 local function cmd_line_switches(arg)
-   local arg = arg or {}
+   arg = arg or {}
    local opts = {}
    for i=1,#arg do
       local v = arg[i]
@@ -670,10 +670,10 @@ end
 
 local function failure_or_error_count(r)
    local t = 0
-   for k,f in pairs(r.err) do
+   for _,_ in pairs(r.err) do
       t = t + 1
    end
-   for k,f in pairs(r.fail) do
+   for _,f in pairs(r.fail) do
       if not f.no_exit then t = t + 1 end
    end
    return t
@@ -684,20 +684,20 @@ local function run_suite(hooks, opts, results, sname, tests)
    tests.ssetup, tests.steardown = nil, nil
 
    if not opts.suite_pat or sname:match(opts.suite_pat) then
-      local run_suite = true
+      local should_run_suite = true
       local res = result_table(sname)
 
       if ssetup then
          local ok, err = pcall(ssetup)
          if not ok or (ok and err == false) then
-            run_suite = false
+            should_run_suite = false
             local msg = fmt("Error in %s's suite_setup: %s", sname, tostring(err))
             failed_suites[#failed_suites+1] = sname
             results.err[sname] = Error{msg=msg}
          end
       end
 
-      if run_suite and count(tests) > 0 then
+      if should_run_suite and count(tests) > 0 then
          local setup, teardown = tests.setup, tests.teardown
          tests.setup, tests.teardown = nil, nil
 
@@ -722,7 +722,7 @@ end
 -- be used. opts is expected to be a table of command line arguments.
 function lunatest.run(hooks, opts)
    -- also check the namespace it's run in
-   local opts = opts and cmd_line_switches(opts) or cmd_line_switches(lt_arg)
+   opts = opts and cmd_line_switches(opts) or cmd_line_switches(lt_arg)
 
    -- Make stdout line-buffered for better interactivity when the output is
    -- not going to the terminal, e.g. is piped to another program.
@@ -755,8 +755,8 @@ function lunatest.run(hooks, opts)
    if hooks.done then hooks.done(results) end
 
    local failures = failure_or_error_count(results)
-   if failures > 0 then os.exit(failures) end
-   if #failed_suites > 0 then os.exit(#failed_suites) end
+   if failures > 0 then exit(failures) end
+   if #failed_suites > 0 then exit(#failed_suites) end
 end
 
 
@@ -861,12 +861,12 @@ local function parse_pattern(pattern)
    end
 
    cs = table.concat(cs)
-   local len = string.len(cs)
-   assert(len > 0, "Empty charset")
+   local cs_len = string.len(cs)
+   assert(cs_len > 0, "Empty charset")
 
    return function()
-             local idx = random_int(1, len)
-             return string.sub(cs, idx, idx)
+             local cs_idx = random_int(1, cs_len)
+             return string.sub(cs, cs_idx, cs_idx)
           end
 end
 
@@ -898,7 +898,7 @@ local function random_string(spec)
 
    local acc = {}
    for i=1,ct do
-      acc[i] = info.gen(self)
+      acc[i] = info.gen()
    end
    local res = table.concat(acc)
    assert(res:len() == ct, "Bad string gen")
@@ -985,7 +985,7 @@ local function get_seeds_and_args(t)
                          r.reason or "", r.msg and ("\n   " .. r.msg) or "", r.seed)
       end
       if r.args then
-         for i,arg in ipairs(r.args) do
+         for _,arg in ipairs(r.args) do
             ss[#ss+1] = "  * " .. arg
          end
       end
@@ -1133,7 +1133,6 @@ function lunatest.assert_random(opt, f, ...)
          dot(".")
       end
    end
-   local overall_status = (passed == count and "PASS" or "FAIL")
 
    report_trial(r, opt)
 end
