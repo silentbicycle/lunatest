@@ -113,7 +113,7 @@ end
 -- # Results #
 -- ###########
 
-local function msec(t)
+local function fmt_msec(t)
    if t and type(t) == "number" then 
       return fmt(" (%.2fms)", t * 1000)
    else
@@ -129,7 +129,7 @@ function RPass:add(s, name) s.pass[name] = self end
 function RPass:type() return "pass" end
 function RPass:tostring(name)
    return fmt("PASS: %s%s%s",
-              name or "(unknown)", msec(self.elapsed),
+              name or "(unknown)", fmt_msec(self.elapsed),
               self.msg and (": " .. tostring(self.msg)) or "")
 end
 
@@ -142,7 +142,7 @@ function RFail:type() return "fail" end
 function RFail:tostring(name)
    return fmt("FAIL: %s%s: %s%s%s",
               name or "(unknown)",
-              msec(self.elapsed),
+              fmt_msec(self.elapsed),
               self.reason or "",
               self.msg and (" - " .. tostring(self.msg)) or "",
               self.line and (" (%d)"):format(self.line) or "")
@@ -168,7 +168,7 @@ function RError:type() return "error" end
 function RError:tostring(name)
    return self.msg or
       fmt("ERROR (in %s%s, couldn't get traceback)",
-          msec(self.elapsed), name or "(unknown)")
+          fmt_msec(self.elapsed), name or "(unknown)")
 end
 
 
